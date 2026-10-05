@@ -58,7 +58,7 @@ namespace ReClass.NET_Tests.Util
 				cb.Enqueue(value);
 			}
 
-			foreach (var value in values.Reverse())
+			foreach (var value in Enumerable.Reverse(values))
 			{
 				Check.That(cb.Dequeue()).IsEqualTo(value);
 			}
