@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <OutputType>WinExe</OutputType>
+    <RootNamespace>ReClassNET_Launcher</RootNamespace>
+    <AssemblyName>ReClass.NET_Launcher</AssemblyName>
+    <Platforms>AnyCPU;x86;x64</Platforms>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
+    <ApplicationIcon>ReClassNet.ico</ApplicationIcon>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+    <!-- The launcher is platform independent and lives one level above the x86 / x64 folders. -->
+    <OutputPath>$(SolutionRoot)bin\$(Configuration)\</OutputPath>
+  </PropertyGroup>
+
+  <!-- The launcher must never be compiled with the x64 define, it decides the platform at runtime. -->
+  <PropertyGroup>
+    <DefineConstants>$([System.String]::Copy('$(DefineConstants)').Replace('RECLASSNET64', ''))</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\ReClass.NET\Constants.cs" Link="Constants.cs" />
+    <Compile Include="..\ReClass.NET\DataExchange\ReClass\ReClassNetFile.Constants.cs" Link="DataExchange\ReClass\ReClassNetFile.Constants.cs" />
+    <Compile Include="..\ReClass.NET\Native\INativeMethods.cs" Link="Native\INativeMethods.cs" />
+    <Compile Include="..\ReClass.NET\Native\NativeMethods.cs" Link="Native\NativeMethods.cs" />
+    <Compile Include="..\ReClass.NET\Native\NativeMethods.Unix.cs" Link="Native\NativeMethods.Unix.cs" />
+    <Compile Include="..\ReClass.NET\Native\NativeMethods.Windows.cs" Link="Native\NativeMethods.Windows.cs" />
+    <Compile Include="..\ReClass.NET\Extensions\IntPtrExtensions.cs" Link="Extensions\IntPtrExtensions.cs" />
+    <Compile Include="..\ReClass.NET\Util\PathUtil.cs" Link="Util\PathUtil.cs" />
+    <Compile Include="..\ReClass.NET\Util\CommandLineArgs.cs" Link="Util\CommandLineArgs.cs" />
+    <Compile Include="..\ReClass.NET\Util\WinUtil.cs" Link="Util\WinUtil.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Remove="Makefile" />
+    <Reference Include="System.IO.Compression" />
+    <Reference Include="System.Xml.Linq" />
+  </ItemGroup>
+
+</Project>

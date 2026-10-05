@@ -1,0 +1,80 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <OutputType>WinExe</OutputType>
+    <RootNamespace>ReClassNET</RootNamespace>
+    <AssemblyName>ReClass.NET</AssemblyName>
+    <Platforms>x86;x64</Platforms>
+    <Platform Condition="'$(Platform)' == '' Or '$(Platform)' == 'AnyCPU'">x86</Platform>
+    <ApplicationIcon>Resources\Icon\ReClassNet.ico</ApplicationIcon>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+    <OutputPath>$(SolutionRoot)bin\$(Configuration)\$(Platform)\</OutputPath>
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+    <!-- CS0618: a handful of upstream usages of obsolete APIs, CS1591: missing xml docs. -->
+    <NoWarn>$(NoWarn);CS1591;CS0618;CS0067</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Files that exist in the tree but were never part of the upstream build. -->
+    <Compile Remove="AddressParser\AstBuilder.cs" />
+    <Compile Remove="AddressParser\Operations.cs" />
+    <Compile Remove="Forms\ProcessMemoryViewForm.cs" />
+    <Compile Remove="Forms\ProcessMemoryViewForm.Designer.cs" />
+    <Compile Remove="Nodes\ClassInstanceArrayNode.cs" />
+    <Compile Remove="Nodes\FunctionNode.Tokenizer.cs" />
+    <EmbeddedResource Remove="Forms\ProcessMemoryViewForm.resx" />
+    <None Remove="Resources\**" />
+    <None Remove="Makefile" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Update="Properties\Resources.Designer.cs">
+      <DesignTime>True</DesignTime>
+      <AutoGen>True</AutoGen>
+      <DependentUpon>Resources.resx</DependentUpon>
+    </Compile>
+    <Compile Update="Properties\Settings.Designer.cs">
+      <DesignTimeSharedInput>True</DesignTimeSharedInput>
+      <AutoGen>True</AutoGen>
+      <DependentUpon>Settings.settings</DependentUpon>
+    </Compile>
+    <EmbeddedResource Update="Properties\Resources.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>Resources.Designer.cs</LastGenOutput>
+    </EmbeddedResource>
+    <None Update="Properties\Settings.settings">
+      <Generator>SettingsSingleFileGenerator</Generator>
+      <LastGenOutput>Settings.Designer.cs</LastGenOutput>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="System.Configuration" />
+    <Reference Include="System.Data.DataSetExtensions" />
+    <Reference Include="System.Design" />
+    <Reference Include="System.IO.Compression" />
+    <Reference Include="System.Xml.Linq" />
+    <Reference Include="ColorCode">
+      <HintPath>..\Dependencies\ColorCode.dll</HintPath>
+    </Reference>
+    <Reference Include="Dia2Lib">
+      <HintPath>..\Dependencies\Dia2Lib.dll</HintPath>
+      <EmbedInteropTypes>True</EmbedInteropTypes>
+    </Reference>
+    <Reference Include="Microsoft.ExceptionMessageBox">
+      <HintPath>..\Dependencies\Microsoft.ExceptionMessageBox.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Runtime reader for the pre-serialized resources produced by the .NET SDK resource generator. -->
+    <PackageReference Include="System.Resources.Extensions" Version="8.0.0" />
+  </ItemGroup>
+
+  <!-- Stamp the build date into the About dialog resource, like the upstream pre-build event did. -->
+  <Target Name="WriteBuildDate" BeforeTargets="PrepareForBuild">
+    <WriteLinesToFile File="$(MSBuildProjectDirectory)\Resources\BuildDate.txt" Lines="$([System.DateTime]::UtcNow.ToString('yyyy/MM/dd HH:mm:ss'))" Overwrite="true" Encoding="Unicode" />
+  </Target>
+
+</Project>
