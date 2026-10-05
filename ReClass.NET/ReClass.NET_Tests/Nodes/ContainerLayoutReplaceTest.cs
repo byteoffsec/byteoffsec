@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using NFluent;
 using ReClassNET.Nodes;
 using Xunit;
@@ -159,6 +160,37 @@ namespace ReClass.NET_Tests.Nodes
 			classNode.ReplaceChildNode(a, pointer);
 
 			CheckLayout(classNode, (typeof(PointerNode), 0), (typeof(FloatNode), 8));
+		}
+#else
+		[Fact]
+		public void Hex16ToInt32OnX86()
+		{
+			var a = new Hex16Node().Named("a");
+			var f = new FloatNode().Named("f");
+			var classNode = CreateClass(a, new Hex16Node().Named("b"), f);
+
+			classNode.ReplaceChildNode(a, new Int32Node());
+
+			CheckLayout(classNode, (typeof(Int32Node), 0), (typeof(FloatNode), 4));
+			Check.That(f.Offset).IsEqualTo(4);
+		}
+
+		[Fact]
+		public void Hex16ToPointerOnX86()
+		{
+			var a = new Hex16Node().Named("a");
+			var f = new FloatNode().Named("f");
+			var classNode = CreateClass(a, new Hex16Node().Named("b"), new Hex32Node().Named("c"), f);
+
+			var pointer = new PointerNode();
+			pointer.Initialize();
+			classNode.ReplaceChildNode(a, pointer);
+
+			// The pointer consumes the hex nodes it needs, f keeps its offset.
+			Check.That(classNode.Nodes[0]).IsSameReferenceAs(pointer);
+			Check.That(classNode.Nodes.Last()).IsSameReferenceAs(f);
+			Check.That(f.Offset).IsEqualTo(8);
+			Check.That(classNode.Nodes.Skip(1).Take(classNode.Nodes.Count - 2).All(n => n is BaseHexNode)).IsTrue();
 		}
 #endif
 
@@ -337,7 +369,13 @@ namespace ReClass.NET_Tests.Nodes
 			classNode.AddBytes(8);
 
 			Check.That(classNode.MemorySize).IsEqualTo(32);
-			Check.That(classNode.Nodes.Count).IsEqualTo(4 + (IntPtr.Size == 8 ? 1 : 2));
+
+			// The padding node types are decided at compile time (see BaseContainerNode.CreateDefaultNodeForSize).
+#if RECLASSNET64
+			Check.That(classNode.Nodes.Count).IsEqualTo(5);
+#else
+			Check.That(classNode.Nodes.Count).IsEqualTo(6);
+#endif
 		}
 
 		[Fact]

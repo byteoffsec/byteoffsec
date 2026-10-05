@@ -293,13 +293,21 @@ namespace ReClassNET.Forms
 				.WhereNot(s => s.Node is ClassNode)
 				.Where(s => s.Node.GetParentContainer()?.ContainsNode(s.Node) == true)
 				.GroupBy(s => s.Node.GetParentContainer())
-				.Select(g => new
+				.Select(g =>
 				{
-					Container = g.Key,
-					Partitions = g.OrderBy(s => g.Key.FindNodeIndex(s.Node))
-						.GroupWhile((s1, s2) => g.Key.FindNodeIndex(s1.Node) + 1 == g.Key.FindNodeIndex(s2.Node))
-						.Select(p => p.ToList())
-						.ToList()
+					// FindNodeIndex is a linear search, look every index up once.
+					var ordered = g.Select(s => (Selected: s, Index: g.Key.FindNodeIndex(s.Node)))
+						.OrderBy(t => t.Index)
+						.ToList();
+
+					return new
+					{
+						Container = g.Key,
+						Partitions = ordered
+							.GroupWhile((t1, t2) => t1.Index + 1 == t2.Index)
+							.Select(p => p.Select(t => t.Selected).ToList())
+							.ToList()
+					};
 				})
 				.Where(g => g.Partitions.Count > 0)
 				.ToList();
@@ -534,9 +542,10 @@ namespace ReClassNET.Forms
 
 		private void RemoveSelectedNodes()
 		{
+			// A node which was consumed by a resized node has no parent anymore (see BaseContainerNode.RemoveNode).
 			memoryViewControl.GetSelectedNodes()
 				.WhereNot(h => h.Node is ClassNode)
-				.ForEach(h => h.Node.GetParentContainer().RemoveNode(h.Node));
+				.ForEach(h => h.Node.GetParentContainer()?.RemoveNode(h.Node));
 
 			ClearSelection();
 		}

@@ -79,12 +79,18 @@ namespace ReClassNET.DataExchange.ReClass
 			var classMap = classes.ToDictionary(c => c.Item1.Attribute("ClassId")?.Value, c => c.Item2);
 			foreach (var (classElement, classNode) in classes)
 			{
+				// Fill the class in one batch, otherwise a class stored after the classes which reference it
+				// grows node by node and the instances consume their successors (see BaseContainerNode.AddNode).
+				classNode.BeginUpdate();
+
 				ReadNodeElements(
 					classElement.Elements("Node"),
 					classNode,
 					classMap,
 					logger
 				).ForEach(classNode.AddNode);
+
+				classNode.EndUpdate();
 			}
 		}
 
@@ -160,7 +166,7 @@ namespace ReClassNET.DataExchange.ReClass
 					}
 
 					var innerClassNode = classes[pointToClassId];
-					if (wrapperNode.ShouldPerformCycleCheckForInnerNode() && !ClassUtil.IsCyclicIfClassIsAccessibleFromParent(parent, innerClassNode, project.Classes))
+					if (wrapperNode.ShouldPerformCycleCheckForInnerNode() && ClassUtil.IsCyclicIfClassIsAccessibleFromParent(parent, innerClassNode, project.Classes))
 					{
 						logger.Log(LogLevel.Error, $"Skipping node with cycle reference: {parent.Name}->{node.Name}");
 

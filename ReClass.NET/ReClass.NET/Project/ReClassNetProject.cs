@@ -75,7 +75,8 @@ namespace ReClassNET.Project
 
 		private void NodesChanged_Handler(BaseNode sender)
 		{
-			classes.ForEach(c => c.UpdateOffsets());
+			// One pass for the whole project, a class referenced by many classes is laid out once.
+			BaseContainerNode.UpdateOffsets(classes);
 		}
 
 		public void Clear()

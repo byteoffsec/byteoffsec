@@ -124,6 +124,8 @@ namespace ReClassNET.Controls
 				memoryPreviewPopUp.UpdateMemory();
 			}
 
+			PruneSelection();
+
 			var view = new DrawContext
 			{
 				Settings = args.Settings,
@@ -165,6 +167,46 @@ namespace ReClassNET.Controls
 			SelectionChanged?.Invoke(this, EventArgs.Empty);
 		}
 
+		/// <summary>
+		/// Tests if the node is still part of a container. A node which was removed, replaced or consumed by a
+		/// resized node loses its parent (see <see cref="BaseContainerNode.RemoveNode"/>), the hot spots and the
+		/// selection may still reference it until the next repaint.
+		/// </summary>
+		/// <param name="node">The node to test.</param>
+		/// <returns>True if the node is a class or a child of its parent container, false otherwise.</returns>
+		private static bool IsAttached(BaseNode node)
+		{
+			if (node is ClassNode)
+			{
+				return true;
+			}
+
+			return node.GetParentContainer()?.ContainsNode(node) == true;
+		}
+
+		/// <summary>
+		/// Removes the nodes which are no longer attached (see <see cref="IsAttached"/>) from the selection.
+		/// Raises <see cref="SelectionChanged"/> if the selection changed.
+		/// </summary>
+		private void PruneSelection()
+		{
+			if (selectedNodes.RemoveAll(h => !IsAttached(h.Node)) == 0)
+			{
+				return;
+			}
+
+			if (selectionAnchor != null && !IsAttached(selectionAnchor.Node))
+			{
+				selectionAnchor = selectedNodes.FirstOrDefault();
+			}
+			if (selectionCaret != null && !IsAttached(selectionCaret.Node))
+			{
+				selectionCaret = selectedNodes.LastOrDefault();
+			}
+
+			OnSelectionChanged();
+		}
+
 		#region Process Input
 
 		protected override void OnMouseClick(MouseEventArgs e)
@@ -172,6 +214,8 @@ namespace ReClassNET.Controls
 			Contract.Requires(e != null);
 
 			hotSpotEditBox.Hide();
+
+			PruneSelection();
 
 			var invalidate = false;
 
@@ -301,7 +345,8 @@ namespace ReClassNET.Controls
 					}
 					else if (hotSpot.Type == HotSpotType.Delete)
 					{
-						hotSpot.Node.GetParentContainer().RemoveNode(hotSpot.Node);
+						// The hot spot may belong to a node which was consumed since the last repaint.
+						hotSpot.Node.GetParentContainer()?.RemoveNode(hotSpot.Node);
 
 						invalidate = true;
 
@@ -389,6 +434,8 @@ namespace ReClassNET.Controls
 
 			base.OnMouseHover(e);
 
+			PruneSelection();
+
 			if (selectedNodes.Count > 1)
 			{
 				var memorySize = selectedNodes.Sum(h => h.Node.MemorySize);
@@ -464,6 +511,8 @@ namespace ReClassNET.Controls
 			{
 				var key = keyData & Keys.KeyCode;
 				var modifier = keyData & Keys.Modifiers;
+
+				PruneSelection();
 
 				if (selectedNodes.Count > 0)
 				{
@@ -630,11 +679,13 @@ namespace ReClassNET.Controls
 		#endregion
 
 		/// <summary>
-		/// Gets informations about all selected nodes.
+		/// Gets informations about all selected nodes. Nodes which are no longer part of a container are not reported.
 		/// </summary>
 		/// <returns>A list with informations about all selected nodes.</returns>
 		public IReadOnlyList<SelectedNodeInfo> GetSelectedNodes()
 		{
+			PruneSelection();
+
 			return selectedNodes
 				.Select(h => new SelectedNodeInfo(h.Node, h.Process, h.Memory, h.Address, h.Level))
 				.ToList();

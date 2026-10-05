@@ -146,8 +146,52 @@ namespace ReClass.NET_Tests.Nodes
 			Check.That(loadedOuter.ContainsNode(text)).IsTrue();
 			Check.That(text.Offset).IsEqualTo(20);
 			Check.That(loadedOuter.Nodes.Take(loadedOuter.FindNodeIndex(text)).Sum(n => n.MemorySize)).IsEqualTo(20);
-			Check.That(loadedOuter.Nodes.Skip(1).Take(loadedOuter.FindNodeIndex(text) - 1).All(n => n is BaseHexNode)).IsTrue();
 			Check.That(loadedOuter.MemorySize).IsEqualTo(size);
+
+			// The 12 bytes of padding use the biggest hex node of the platform.
+			var padding = loadedOuter.Nodes.Skip(1).Take(loadedOuter.FindNodeIndex(text) - 1).Select(n => n.GetType());
+#if RECLASSNET64
+			Check.That(padding).ContainsExactly(typeof(Hex64Node), typeof(Hex32Node));
+#else
+			Check.That(padding).ContainsExactly(typeof(Hex32Node), typeof(Hex32Node), typeof(Hex32Node));
+#endif
+		}
+
+		[Fact]
+		public void TwoClassesReferencingTheSameInnerClassStoredAfterThem()
+		{
+			using var project = new ReClassNetProject();
+
+			var inner = CreateClass(new Hex32Node().Named("x"), new Hex32Node().Named("y"));
+			inner.Name = "Inner";
+
+			var outerA = CreateClass(InstanceOf(inner).Named("instance"), new Hex32Node().Named("pad"), new FloatNode().Named("fa"));
+			outerA.Name = "OuterA";
+
+			var outerB = CreateClass(InstanceOf(inner).Named("instance"), new Hex32Node().Named("pad"), new FloatNode().Named("fb"));
+			outerB.Name = "OuterB";
+
+			project.AddClass(outerA);
+			project.AddClass(outerB);
+			project.AddClass(inner);
+
+			using var loaded = SaveAndLoad(project);
+
+			var loadedA = loaded.GetClassByUuid(outerA.Uuid);
+			var loadedB = loaded.GetClassByUuid(outerB.Uuid);
+			var loadedInner = loaded.GetClassByUuid(inner.Uuid);
+
+			CheckLayout(loadedA, (typeof(ClassInstanceNode), 0), (typeof(Hex32Node), 8), (typeof(FloatNode), 12));
+			CheckLayout(loadedB, (typeof(ClassInstanceNode), 0), (typeof(Hex32Node), 8), (typeof(FloatNode), 12));
+			Check.That(loaded.Classes.All(c => c.IsLayoutComplete)).IsTrue();
+
+			// Only one of the classes gets notified through the wrapper chain, the other one through the project.
+			loadedInner.AddBytes(4);
+
+			CheckLayout(loadedA, (typeof(ClassInstanceNode), 0), (typeof(FloatNode), 12));
+			Check.That(loadedA.Nodes[1].Name).IsEqualTo("fa");
+			CheckLayout(loadedB, (typeof(ClassInstanceNode), 0), (typeof(FloatNode), 12));
+			Check.That(loadedB.Nodes[1].Name).IsEqualTo("fb");
 		}
 
 		[Fact]
@@ -192,6 +236,10 @@ namespace ReClass.NET_Tests.Nodes
 
 			Check.That(xml).Contains("<node type=\"Hex32Node\" name=\"a\"");
 			Check.That(xml).Not.Contains("LayoutSize");
+
+			// The classes are written in project order: the outer class comes before the classes it references.
+			Check.That(xml.IndexOf("name=\"Outer\"", StringComparison.Ordinal)).IsStrictlyLessThan(xml.IndexOf("name=\"Inner\"", StringComparison.Ordinal));
+			Check.That(xml.IndexOf("name=\"Inner\"", StringComparison.Ordinal)).IsStrictlyLessThan(xml.IndexOf("name=\"Innermost\"", StringComparison.Ordinal));
 		}
 	}
 }

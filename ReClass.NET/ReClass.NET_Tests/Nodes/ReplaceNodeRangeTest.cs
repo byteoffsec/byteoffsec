@@ -311,6 +311,129 @@ namespace ReClass.NET_Tests.Nodes
 			Check.That(BaseContainerNode.GetNodesConsumedByReplacingRanges(ranges, new Hex64Node())).ContainsExactly(f1, f2);
 		}
 
+		/// <summary>
+		/// Runs the dry run and the real replacement on the same fixture and checks that exactly the predicted
+		/// defined nodes (not selected, not padding) were consumed. The confirmation dialog depends on both agreeing.
+		/// </summary>
+		private static void CheckDryRunMatchesReplacement(Func<BaseNode> createNode, ClassNode classNode, params BaseNode[][] ranges)
+		{
+			var selected = new HashSet<BaseNode>(ranges.SelectMany(r => r));
+			var defined = classNode.Nodes.Where(n => !selected.Contains(n) && !(n is BaseHexNode)).ToList();
+
+			var predicted = BaseContainerNode.GetNodesConsumedByReplacingRanges(
+				ranges.Select(r => ((BaseContainerNode)classNode, (IReadOnlyList<BaseNode>)r)),
+				createNode()
+			);
+
+			foreach (var range in ranges)
+			{
+				// Like the UI does: nodes consumed by a previous range are skipped.
+				classNode.ReplaceNodeRange(range.Where(classNode.ContainsNode), createNode);
+			}
+
+			var consumed = defined.Where(n => !classNode.ContainsNode(n)).ToList();
+
+			Check.That(consumed).ContainsExactly(predicted);
+		}
+
+		[Fact]
+		public void DryRunMatchesTheReplacementWithAZeroSizedNodeBehindTheRange()
+		{
+			var a = new Hex32Node().Named("a");
+			var b = new Hex32Node().Named("b");
+			var classNode = CreateClass(a, b, Text8(0).Named("empty"), new Int32Node().Named("x"), new FloatNode().Named("y"));
+
+			CheckDryRunMatchesReplacement(() => new Vector3Node(), classNode, new BaseNode[] { a, b });
+
+			Check.That(classNode.Names()).ContainsExactly("a", "empty", "y");
+		}
+
+		[Fact]
+		public void DryRunMatchesTheReplacementWithAPartiallyConsumedPaddingNode()
+		{
+			var a = new Hex32Node().Named("a");
+			var b = new Hex32Node().Named("b");
+			var classNode = CreateClass(a, b, new Hex64Node().Named("c"), new FloatNode().Named("d"));
+
+			CheckDryRunMatchesReplacement(() => new Vector3Node(), classNode, new BaseNode[] { a, b });
+
+			Check.That(classNode.Nodes.Last().Name).IsEqualTo("d");
+			Check.That(classNode.Nodes.Last().Offset).IsEqualTo(16);
+		}
+
+		[Fact]
+		public void DryRunMatchesTheReplacementWithAPartiallyConsumedDefinedNode()
+		{
+			var a = new Hex32Node().Named("a");
+			var b = new Hex32Node().Named("b");
+			var c = new Int64Node().Named("c");
+			var classNode = CreateClass(a, b, c, new FloatNode().Named("d"));
+
+			CheckDryRunMatchesReplacement(() => new Vector3Node(), classNode, new BaseNode[] { a, b });
+
+			// The remaining 4 bytes of c are padding now.
+			CheckLayout(classNode, (typeof(Vector3Node), 0), (typeof(Hex32Node), 12), (typeof(FloatNode), 16));
+			Check.That(classNode.Nodes.Last().Name).IsEqualTo("d");
+			CheckDetached(classNode, c);
+		}
+
+		[Fact]
+		public void DryRunMatchesTheReplacementWithTwoPartitions()
+		{
+			var a = new Hex32Node().Named("a");
+			var b = new Hex32Node().Named("b");
+			var c = new Hex32Node().Named("c");
+			var classNode = CreateClass(a, new Int32Node().Named("x"), b, c, new Int32Node().Named("d"));
+
+			// The first partition grows into the second one, the second one grows beyond the class.
+			CheckDryRunMatchesReplacement(() => new Vector3Node(), classNode, new BaseNode[] { a }, new BaseNode[] { b, c });
+
+			CheckLayout(classNode, (typeof(Vector3Node), 0), (typeof(Vector3Node), 12));
+			Check.That(classNode.Names()).ContainsExactly("a", "c");
+		}
+
+		[Fact]
+		public void DryRunMatchesTheReplacementForSizeAdoptingTypes()
+		{
+			var a = new Hex32Node().Named("a");
+			var b = new Hex64Node().Named("b");
+			var classNode = CreateClass(a, b, new Int32Node().Named("x"));
+
+			CheckDryRunMatchesReplacement(() => new Utf8TextNode(), classNode, new BaseNode[] { a, b });
+
+			Check.That(classNode.Names()).ContainsExactly("a", "b", "x");
+		}
+
+		[Fact]
+		public void DryRunMatchesTheReplacementWhenTheRangeIsRefilledWithSmallerNodes()
+		{
+			var a = new Hex64Node().Named("a");
+			var b = new Int64Node().Named("b");
+			var classNode = CreateClass(a, b, new Int32Node().Named("x"));
+
+			CheckDryRunMatchesReplacement(() => new FloatNode(), classNode, new BaseNode[] { a, b });
+
+			CheckLayout(classNode, (typeof(FloatNode), 0), (typeof(FloatNode), 4), (typeof(FloatNode), 8), (typeof(FloatNode), 12), (typeof(Int32Node), 16));
+		}
+
+		[Fact]
+		public void ContiguityCheckUsesThePositionOfTheNodes()
+		{
+			var a = new Hex32Node().Named("a");
+			var b = new Hex32Node().Named("b");
+			var c = new Hex32Node().Named("c");
+			var classNode = CreateClass(a, b, c);
+
+			// Reversed order is not contiguous either.
+			Check.ThatCode(() => classNode.ReplaceNodeRange(new[] { b, a }, () => new FloatNode())).Throws<ArgumentException>();
+			Check.ThatCode(() => classNode.ReplaceNodeRange(new[] { c, c }, () => new FloatNode())).Throws<ArgumentException>();
+
+			var placed = classNode.ReplaceNodeRange(new[] { b, c }, () => new FloatNode());
+
+			Check.That(placed).HasSize(2);
+			CheckLayout(classNode, (typeof(Hex32Node), 0), (typeof(FloatNode), 4), (typeof(FloatNode), 8));
+		}
+
 		[Fact]
 		public void ConsumedNodesAreNotReplacedAgain()
 		{

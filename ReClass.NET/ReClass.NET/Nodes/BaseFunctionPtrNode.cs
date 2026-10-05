@@ -13,6 +13,11 @@ namespace ReClassNET.Nodes
 	{
 		public override int MemorySize => IntPtr.Size;
 
+		/// <summary>
+		/// A function pointer has a fixed size, only the code it points to gets disassembled.
+		/// </summary>
+		protected internal override bool ParticipatesInSizeCompensation => true;
+
 		public override string GetToolTipText(HotSpot spot)
 		{
 			var ptr = spot.Memory.ReadIntPtr(Offset);

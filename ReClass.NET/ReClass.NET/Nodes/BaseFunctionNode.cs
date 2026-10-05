@@ -21,6 +21,13 @@ namespace ReClassNET.Nodes
 		protected IntPtr Address = IntPtr.Zero;
 		protected readonly List<FunctionNodeInstruction> Instructions = new List<FunctionNodeInstruction>();
 
+		/// <summary>
+		/// The size of a function is the length of the disassembled code which is only known once the node is drawn
+		/// with a valid process. Such a size change is not a user action, so the parent container must never consume
+		/// the successors of the node for it.
+		/// </summary>
+		protected internal override bool ParticipatesInSizeCompensation => false;
+
 		protected Size DrawInstructions(DrawContext view, int tx, int y)
 		{
 			Contract.Requires(view != null);

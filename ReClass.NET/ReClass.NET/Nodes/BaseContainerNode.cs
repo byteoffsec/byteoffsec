@@ -2,25 +2,42 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Linq;
+using System.Threading;
 
 namespace ReClassNET.Nodes
 {
 	public abstract class BaseContainerNode : BaseNode
 	{
+		/// <summary>Source of the layout pass ids, shared by all threads so an id is never handed out twice.</summary>
+		private static int lastLayoutPass;
+
+		/// <summary>The id of the layout pass running on the current thread or 0 if no pass is active (see <see cref="UpdateLayout"/>).</summary>
+		[ThreadStatic]
+		private static int currentLayoutPass;
+
 		private readonly List<BaseNode> nodes = new List<BaseNode>();
 
 		private int updateCount;
 
 		private bool isLayoutInProgress;
 
+		/// <summary>The layout pass which settled this container the last time (see <see cref="UpdateLayout"/>).</summary>
+		private int settledLayoutPass;
+
+		/// <summary>True once <see cref="IsLayoutComplete"/> was true at least once.</summary>
+		private bool hasBeenComplete;
+
 		/// <summary>The child nodes of the container.</summary>
 		public IReadOnlyList<BaseNode> Nodes => nodes;
 
 		/// <summary>
-		/// True if the container was laid out at least once outside of a <see cref="BeginUpdate"/> / <see cref="EndUpdate"/> batch,
-		/// contains at least one node and the size of every child was known at that time.
-		/// Containers which wrap this container (class instances, arrays of class instances, unions) only record a
+		/// True if the container was laid out at least once outside of a <see cref="BeginUpdate"/> / <see cref="EndUpdate"/> batch
+		/// and the size of every child was known at that time. A container which needs nodes (see <see cref="RequiresNodesForCompleteLayout"/>)
+		/// is complete once it was laid out with nodes, so a class which gets emptied keeps the known size 0 while a class which
+		/// is still loading has an unknown size. The size of a node which is determined at runtime (see <see cref="BaseNode.ParticipatesInSizeCompensation"/>)
+		/// is never known. Containers which wrap this container (class instances, arrays of class instances, unions) only record a
 		/// <see cref="BaseNode.LayoutSize"/> for it if the layout is complete, so a half loaded class never triggers a size compensation.
+		/// The value is not touched by layouts performed inside a batch, it gets decided by the layout <see cref="EndUpdate"/> performs.
 		/// </summary>
 		public bool IsLayoutComplete { get; private set; }
 
@@ -79,6 +96,32 @@ namespace ReClassNET.Nodes
 		}
 
 		/// <summary>
+		/// Lays out all containers in one pass. A container which gets settled as the nested container of another one
+		/// (a class referenced by many classes) is laid out only once.
+		/// </summary>
+		/// <param name="containers">The containers to lay out.</param>
+		public static void UpdateOffsets(IEnumerable<BaseContainerNode> containers)
+		{
+			Contract.Requires(containers != null);
+
+			var isOutermost = BeginLayoutPass();
+			try
+			{
+				foreach (var container in containers)
+				{
+					if (container.settledLayoutPass != currentLayoutPass)
+					{
+						container.UpdateOffsets();
+					}
+				}
+			}
+			finally
+			{
+				EndLayoutPass(isOutermost);
+			}
+		}
+
+		/// <summary>
 		/// Shared implementation of <see cref="UpdateOffsets"/>.
 		/// </summary>
 		/// <param name="sequentialOffsets">True to place the children one after another, false to place all children at offset 0 (union).</param>
@@ -89,13 +132,20 @@ namespace ReClassNET.Nodes
 				return;
 			}
 
+			var isOutermost = BeginLayoutPass();
+
 			isLayoutInProgress = true;
 			try
 			{
 				// Nested containers must settle first, otherwise their size is not final yet.
+				// A container which was already settled in this pass (another instance of the same class) is final.
 				foreach (var node in nodes)
 				{
-					GetNestedContainer(node)?.UpdateOffsets();
+					var nested = GetNestedContainer(node);
+					if (nested != null && nested.settledLayoutPass != currentLayoutPass)
+					{
+						nested.UpdateOffsets();
+					}
 				}
 
 				if (PreservesSuccessorOffsets)
@@ -105,7 +155,7 @@ namespace ReClassNET.Nodes
 				}
 
 				var offset = 0;
-				var complete = updateCount == 0 && (nodes.Count > 0 || !RequiresNodesForCompleteLayout);
+				var complete = nodes.Count > 0 || hasBeenComplete || !RequiresNodesForCompleteLayout;
 				foreach (var node in nodes)
 				{
 					node.Offset = sequentialOffsets ? offset : 0;
@@ -116,11 +166,51 @@ namespace ReClassNET.Nodes
 					complete &= isKnown;
 				}
 
-				IsLayoutComplete = complete;
+				// The layout inside a batch is transient, the layout performed by EndUpdate decides.
+				if (updateCount == 0)
+				{
+					IsLayoutComplete = complete;
+					hasBeenComplete |= complete;
+				}
+
+				settledLayoutPass = currentLayoutPass;
 			}
 			finally
 			{
 				isLayoutInProgress = false;
+
+				EndLayoutPass(isOutermost);
+			}
+		}
+
+		/// <summary>
+		/// Starts a layout pass on the current thread if none is active.
+		/// </summary>
+		/// <returns>True if a new pass was started, false if the running pass is reused.</returns>
+		private static bool BeginLayoutPass()
+		{
+			if (currentLayoutPass != 0)
+			{
+				return false;
+			}
+
+			do
+			{
+				currentLayoutPass = Interlocked.Increment(ref lastLayoutPass);
+			} while (currentLayoutPass == 0);
+
+			return true;
+		}
+
+		/// <summary>
+		/// Ends the layout pass started by <see cref="BeginLayoutPass"/>.
+		/// </summary>
+		/// <param name="isOutermost">The return value of <see cref="BeginLayoutPass"/>.</param>
+		private static void EndLayoutPass(bool isOutermost)
+		{
+			if (isOutermost)
+			{
+				currentLayoutPass = 0;
 			}
 		}
 
@@ -143,10 +233,16 @@ namespace ReClassNET.Nodes
 		}
 
 		/// <summary>
-		/// Tests if the size of the node is final. The size of a node which depends on a container whose layout is not complete is not known.
+		/// Tests if the size of the node is final. The size of a node which is determined at runtime or which depends
+		/// on a container whose layout is not complete is not known.
 		/// </summary>
 		private static bool IsSizeKnown(BaseNode node)
 		{
+			if (!node.ParticipatesInSizeCompensation)
+			{
+				return false;
+			}
+
 			var nested = GetNestedContainer(node);
 
 			return nested == null || nested.IsLayoutComplete;
@@ -243,7 +339,8 @@ namespace ReClassNET.Nodes
 		/// </summary>
 		/// <param name="node">The child node which changes its size.</param>
 		/// <param name="newSize">The new size of the node.</param>
-		/// <returns>The nodes which would be removed. Empty if nothing would be removed or if the container doesn't preserve the offsets of the successors.</returns>
+		/// <returns>The nodes which would be removed. Empty if nothing would be removed, if the container doesn't preserve
+		/// the offsets of the successors or if the size of the node is not compensated (see <see cref="BaseNode.ParticipatesInSizeCompensation"/>).</returns>
 		public IReadOnlyList<BaseNode> GetNodesConsumedByResize(BaseNode node, int newSize)
 		{
 			Contract.Requires(node != null);
@@ -254,15 +351,22 @@ namespace ReClassNET.Nodes
 				throw new ArgumentException($"Node {node} is not a child of {this}.");
 			}
 
-			var consumed = new List<BaseNode>();
-
-			if (!PreservesSuccessorOffsets)
+			if (!PreservesSuccessorOffsets || !node.ParticipatesInSizeCompensation)
 			{
-				return consumed;
+				return new List<BaseNode>();
 			}
 
-			var remaining = newSize - GetOccupiedSize(node);
-			for (var i = index + 1; remaining > 0 && i < nodes.Count; ++i)
+			return GetSuccessorsCoveredByGrowth(index, newSize - GetOccupiedSize(node));
+		}
+
+		/// <summary>
+		/// Gets the successors of the node at <paramref name="index"/> which are covered (completely or partially) if the node grows by <paramref name="growth"/> bytes.
+		/// </summary>
+		private List<BaseNode> GetSuccessorsCoveredByGrowth(int index, int growth)
+		{
+			var covered = new List<BaseNode>();
+
+			for (var i = index + 1; growth > 0 && i < nodes.Count; ++i)
 			{
 				var successor = nodes[i];
 
@@ -272,12 +376,12 @@ namespace ReClassNET.Nodes
 					continue;
 				}
 
-				consumed.Add(successor);
+				covered.Add(successor);
 
-				remaining -= successorSize;
+				growth -= successorSize;
 			}
 
-			return consumed;
+			return covered;
 		}
 
 		/// <summary>
@@ -293,14 +397,27 @@ namespace ReClassNET.Nodes
 			Contract.Requires(ranges != null);
 			Contract.Requires(probe != null);
 
+			var consumed = new List<BaseNode>();
+
+			if (!probe.ParticipatesInSizeCompensation)
+			{
+				// The new nodes shift their successors like the legacy layout did (see ReplaceChildNode).
+				return consumed;
+			}
+
 			var rangeList = ranges.ToList();
 
 			var selected = new HashSet<BaseNode>(rangeList.SelectMany(r => r.Nodes));
 
-			var consumed = new List<BaseNode>();
 			foreach (var (container, nodes) in rangeList)
 			{
-				if (container == null || nodes.Count == 0 || !container.ContainsNode(nodes[0]))
+				if (container == null || !container.PreservesSuccessorOffsets || nodes.Count == 0)
+				{
+					continue;
+				}
+
+				var index = container.FindNodeIndex(nodes[0]);
+				if (index == -1)
 				{
 					continue;
 				}
@@ -309,7 +426,7 @@ namespace ReClassNET.Nodes
 
 				// Only the first node of a range can grow beyond the range, all other nodes have to fit into it.
 				consumed.AddRange(
-					container.GetNodesConsumedByResize(nodes[0], probe.MemorySize)
+					container.GetSuccessorsCoveredByGrowth(index, probe.MemorySize - GetOccupiedSize(nodes[0]))
 						.Where(n => !selected.Contains(n) && !(n is BaseHexNode))
 				);
 			}
@@ -471,7 +588,9 @@ namespace ReClassNET.Nodes
 
 			if (ShouldCompensateSizeChanges)
 			{
-				if (ContainerLayoutPolicy.PreserveSuccessorOffsets)
+				// The size of a node which doesn't participate in the compensation (function) is just a placeholder
+				// until the node is drawn, so it is placed like the legacy layout did.
+				if (ContainerLayoutPolicy.PreserveSuccessorOffsets && newNode.ParticipatesInSizeCompensation)
 				{
 					GetNestedContainer(newNode)?.UpdateOffsets();
 
@@ -499,7 +618,8 @@ namespace ReClassNET.Nodes
 		/// If <see cref="PreservesSuccessorOffsets"/> is true the range is filled with as many instances as fit,
 		/// the remainder is padded with default nodes and nodes inside the range which can't be replaced are converted to default nodes.
 		/// If the first instance is bigger than the whole range it consumes bytes beyond the range exactly like a single growth.
-		/// Otherwise every node of the range (and every padding node created by it) is replaced on its own like the legacy ReClass.NET did.
+		/// Otherwise, and for node types which don't participate in the compensation (see <see cref="BaseNode.ParticipatesInSizeCompensation"/>),
+		/// every node of the range (and every padding node created by it) is replaced on its own like the legacy ReClass.NET did.
 		/// </summary>
 		/// <param name="range">The contiguous child nodes to replace, ordered by position. Nodes which are no longer children are ignored.</param>
 		/// <param name="createNode">Factory for the new nodes. Gets called once per created instance.</param>
@@ -520,22 +640,25 @@ namespace ReClassNET.Nodes
 			var startIndex = FindNodeIndex(rangeNodes[0]);
 			for (var i = 1; i < rangeNodes.Count; ++i)
 			{
-				if (FindNodeIndex(rangeNodes[i]) != startIndex + i)
+				if (startIndex + i >= nodes.Count || nodes[startIndex + i] != rangeNodes[i])
 				{
 					throw new ArgumentException("The nodes of the range must be contiguous.", nameof(range));
 				}
 			}
 
+			// The first node decides how the range gets filled.
+			var firstNode = createNode();
+
 			BeginUpdate();
 			try
 			{
-				if (rangeNodes.Count == 1 || !PreservesSuccessorOffsets)
+				if (rangeNodes.Count == 1 || !PreservesSuccessorOffsets || !firstNode.ParticipatesInSizeCompensation)
 				{
-					ReplaceNodesIndividually(rangeNodes, createNode, placedNodes);
+					ReplaceNodesIndividually(rangeNodes, firstNode, createNode, placedNodes);
 				}
 				else
 				{
-					RefillRange(startIndex, rangeNodes.Sum(n => n.MemorySize), createNode, placedNodes);
+					RefillRange(startIndex, rangeNodes.Sum(n => n.MemorySize), firstNode, createNode, placedNodes);
 				}
 			}
 			finally
@@ -549,7 +672,7 @@ namespace ReClassNET.Nodes
 		/// <summary>
 		/// Legacy range replacement: every node gets replaced on its own and padding created by a replacement gets replaced too.
 		/// </summary>
-		private void ReplaceNodesIndividually(List<BaseNode> rangeNodes, Func<BaseNode> createNode, List<BaseNode> placedNodes)
+		private void ReplaceNodesIndividually(List<BaseNode> rangeNodes, BaseNode firstNode, Func<BaseNode> createNode, List<BaseNode> placedNodes)
 		{
 			var replaceMultiple = rangeNodes.Count > 1;
 
@@ -562,7 +685,8 @@ namespace ReClassNET.Nodes
 					continue;
 				}
 
-				var node = createNode();
+				var node = firstNode ?? createNode();
+				firstNode = null;
 
 				var createdNodes = new List<BaseNode>();
 				ReplaceChildNode(target, node, ref createdNodes);
@@ -583,7 +707,7 @@ namespace ReClassNET.Nodes
 		/// Fills <paramref name="rangeSize"/> bytes beginning at <paramref name="startIndex"/> with as many created nodes as fit.
 		/// The remainder of the range is converted to default nodes.
 		/// </summary>
-		private void RefillRange(int startIndex, int rangeSize, Func<BaseNode> createNode, List<BaseNode> placedNodes)
+		private void RefillRange(int startIndex, int rangeSize, BaseNode firstNode, Func<BaseNode> createNode, List<BaseNode> placedNodes)
 		{
 			var index = startIndex;
 			var filled = 0;
@@ -592,7 +716,9 @@ namespace ReClassNET.Nodes
 			{
 				var target = nodes[index];
 
-				var node = createNode();
+				var node = firstNode ?? createNode();
+				firstNode = null;
+
 				node.CopyFromNode(target); // Some nodes (text, bit field) adopt the size of the replaced node.
 
 				var nodeSize = node.MemorySize;
@@ -727,21 +853,34 @@ namespace ReClassNET.Nodes
 		}
 
 		/// <summary>
-		/// Adds all nodes at the end of the container.
+		/// Adds all nodes at the end of the container in one batch (see <see cref="AddNode"/>).
 		/// </summary>
 		/// <param name="nodes">The nodes to add.</param>
 		public void AddNodes(IEnumerable<BaseNode> nodes)
 		{
 			Contract.Requires(nodes != null);
 
-			foreach (var node in nodes)
+			BeginUpdate();
+			try
 			{
-				AddNode(node);
+				foreach (var node in nodes)
+				{
+					AddNode(node);
+				}
+			}
+			finally
+			{
+				EndUpdate();
 			}
 		}
 
 		/// <summary>
 		/// Adds the node at the end of the container.
+		/// Every call outside of a batch lays the container out and publishes the new size to the containers which
+		/// reference it. A class which gets filled node by node therefore grows step by step and, if it is referenced
+		/// by a class whose layout is already complete, the instances consume their successors on every step
+		/// (see <see cref="ContainerLayoutPolicy"/>). Bulk fills (importers, generators) must be batched with
+		/// <see cref="BeginUpdate"/> / <see cref="EndUpdate"/> or use <see cref="AddNodes"/>, which publishes the final size once.
 		/// </summary>
 		/// <param name="node">The node to add.</param>
 		public void AddNode(BaseNode node)

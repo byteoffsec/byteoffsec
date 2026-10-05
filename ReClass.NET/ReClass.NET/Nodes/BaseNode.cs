@@ -59,6 +59,14 @@ namespace ReClassNET.Nodes
 		/// </summary>
 		public int LayoutSize { get; internal set; } = -1;
 
+		/// <summary>
+		/// True if a size change of this node is intended by the user and gets compensated by the parent container
+		/// (see <see cref="ContainerLayoutPolicy"/>). Nodes whose size is determined at runtime by the tool (a function
+		/// gets its size from the disassembler while it is drawn) return false: the container never records a
+		/// <see cref="LayoutSize"/> for them and their successors shift like they did in the legacy layout.
+		/// </summary>
+		protected internal virtual bool ParticipatesInSizeCompensation => true;
+
 		public event NodeEventHandler NameChanged;
 		public event NodeEventHandler CommentChanged;
 

@@ -189,8 +189,296 @@ namespace ReClass.NET_Tests.Nodes
 			Check.That(classNode.Nodes[0]).IsSameReferenceAs(union);
 			Check.That(classNode.Nodes.Last()).IsSameReferenceAs(c);
 			Check.That(c.Offset).IsEqualTo(12);
-			Check.That(classNode.Nodes.Skip(1).Take(classNode.Nodes.Count - 2).All(n => n is BaseHexNode)).IsTrue();
 			Check.That(classNode.MemorySize).IsEqualTo(16);
+
+			// The padding uses the biggest hex node of the platform, there is no Hex64 on x86.
+#if RECLASSNET64
+			CheckLayout(classNode, (typeof(UnionNode), 0), (typeof(Hex64Node), 4), (typeof(Hex32Node), 12));
+#else
+			CheckLayout(classNode, (typeof(UnionNode), 0), (typeof(Hex32Node), 4), (typeof(Hex32Node), 8), (typeof(Hex32Node), 12));
+#endif
+		}
+
+		[Fact]
+		public void ChangingTheReferencedClassOfAnInstanceCompensates()
+		{
+			var small = CreateClass(new Hex32Node().Named("s"));
+			var big = CreateClass(new Vector3Node().Named("v"));
+
+			var instance = InstanceOf(small).Named("instance");
+			var tail = new FloatNode().Named("tail");
+			var outer = CreateClass(instance, new Hex32Node().Named("b"), new Hex32Node().Named("c"), tail);
+
+			// "Change class type" in the memory view: the instance grows by 8 bytes.
+			instance.ChangeInnerNode(big);
+
+			CheckLayout(outer, (typeof(ClassInstanceNode), 0), (typeof(FloatNode), 12));
+			Check.That(outer.Nodes[1]).IsSameReferenceAs(tail);
+			Check.That(outer.MemorySize).IsEqualTo(16);
+
+			// And back: the instance shrinks and gets padded.
+			instance.ChangeInnerNode(small);
+
+			Check.That(outer.Nodes[0]).IsSameReferenceAs(instance);
+			Check.That(outer.Nodes.Last()).IsSameReferenceAs(tail);
+			Check.That(tail.Offset).IsEqualTo(12);
+			Check.That(outer.Nodes.Skip(1).Take(outer.Nodes.Count - 2).All(n => n is BaseHexNode)).IsTrue();
+			Check.That(outer.MemorySize).IsEqualTo(16);
+		}
+
+		[Fact]
+		public void ChangingToAnEmptyClassShiftsInsteadOfConsuming()
+		{
+			var filled = CreateClass(new Hex32Node(), new Hex32Node());
+			var empty = ClassNode.Create();
+
+			var instance = InstanceOf(filled).Named("instance");
+			var tail = new FloatNode().Named("tail");
+			var outer = CreateClass(instance, tail);
+
+			Check.That(tail.Offset).IsEqualTo(8);
+
+			// The shrink to 0 bytes is compensated with padding, but the size of a class which was never filled is unknown.
+			instance.ChangeInnerNode(empty);
+
+			Check.That(outer.Nodes[0]).IsSameReferenceAs(instance);
+			Check.That(outer.Nodes.Last()).IsSameReferenceAs(tail);
+			Check.That(tail.Offset).IsEqualTo(8);
+			Check.That(outer.MemorySize).IsEqualTo(12);
+			Check.That(outer.Nodes.Skip(1).Take(outer.Nodes.Count - 2).Sum(n => n.MemorySize)).IsEqualTo(8);
+			Check.That(instance.LayoutSize).IsEqualTo(-1);
+			Check.That(outer.IsLayoutComplete).IsFalse();
+
+			// Filling the class is intentional (project loading), the successors shift and the padding stays.
+			empty.AddBytes(4);
+
+			Check.That(outer.Nodes.Last()).IsSameReferenceAs(tail);
+			Check.That(tail.Offset).IsEqualTo(12);
+			Check.That(outer.MemorySize).IsEqualTo(16);
+			Check.That(instance.LayoutSize).IsEqualTo(4);
+			Check.That(outer.IsLayoutComplete).IsTrue();
+		}
+
+		[Fact]
+		public void EmptiedClassKeepsItsTrackingAndTheRefillIsCompensated()
+		{
+			var x = new Hex32Node().Named("x");
+			var inner = CreateClass(x);
+
+			var instance = InstanceOf(inner).Named("instance");
+			var f = new FloatNode().Named("f");
+			var outer = CreateClass(instance, f);
+
+			Check.That(f.Offset).IsEqualTo(4);
+
+			// Removing the last node of a class keeps the class complete with the known size 0.
+			inner.RemoveNode(x);
+
+			Check.That(inner.MemorySize).IsEqualTo(0);
+			Check.That(inner.IsLayoutComplete).IsTrue();
+			CheckLayout(outer, (typeof(ClassInstanceNode), 0), (typeof(Hex32Node), 0), (typeof(FloatNode), 4));
+			Check.That(instance.LayoutSize).IsEqualTo(0);
+
+			// Refilling the class is a growth from 0 which consumes the padding, f keeps its offset.
+			inner.AddBytes(4);
+
+			CheckLayout(outer, (typeof(ClassInstanceNode), 0), (typeof(FloatNode), 4));
+			Check.That(outer.Nodes[1]).IsSameReferenceAs(f);
+			Check.That(outer.MemorySize).IsEqualTo(8);
+		}
+
+		[Fact]
+		public void PointerToAChangedClassDoesNotCompensate()
+		{
+			var inner = CreateClass(new Hex32Node().Named("x"));
+
+			var pointer = new PointerNode().Named("pointer");
+			pointer.ChangeInnerNode(InstanceOf(inner));
+			var c = new FloatNode().Named("c");
+			var outer = CreateClass(pointer, c);
+
+			Check.That(pointer.LayoutSize).IsEqualTo(IntPtr.Size);
+			Check.That(outer.IsLayoutComplete).IsTrue();
+
+			inner.AddBytes(64);
+			outer.UpdateOffsets();
+
+			Check.That(outer.Nodes).ContainsExactly(pointer, c);
+			Check.That(c.Offset).IsEqualTo(IntPtr.Size);
+			Check.That(outer.MemorySize).IsEqualTo(IntPtr.Size + 4);
+		}
+
+		[Fact]
+		public void ArrayOfPointersToAChangedClassDoesNotCompensate()
+		{
+			var inner = CreateClass(new Hex32Node().Named("x"));
+
+			var pointer = new PointerNode().Named("pointer");
+			pointer.ChangeInnerNode(InstanceOf(inner));
+			var array = ArrayOf(pointer, 3).Named("array");
+			var c = new FloatNode().Named("c");
+			var outer = CreateClass(array, c);
+
+			inner.AddBytes(64);
+			outer.UpdateOffsets();
+
+			Check.That(outer.Nodes).ContainsExactly(array, c);
+			Check.That(c.Offset).IsEqualTo(3 * IntPtr.Size);
+			Check.That(outer.MemorySize).IsEqualTo(3 * IntPtr.Size + 4);
+		}
+
+		[Fact]
+		public void LayoutInsideABatchKeepsTheCompletenessOfTheClass()
+		{
+			var inner = CreateClass(new Hex32Node().Named("x"));
+
+			var instance = InstanceOf(inner).Named("instance");
+			var f = new FloatNode().Named("f");
+			var outer = CreateClass(instance, new Hex32Node().Named("pad"), f);
+
+			inner.BeginUpdate();
+
+			// Something else changes while the batch is open and the project lays out every class.
+			outer.UpdateOffsets();
+
+			Check.That(inner.IsLayoutComplete).IsTrue();
+			Check.That(instance.LayoutSize).IsEqualTo(4);
+
+			inner.AddBytes(4);
+			inner.EndUpdate();
+
+			// The growth of the batched class is still compensated.
+			CheckLayout(outer, (typeof(ClassInstanceNode), 0), (typeof(FloatNode), 8));
+			Check.That(outer.Nodes[1]).IsSameReferenceAs(f);
+		}
+
+		[Fact]
+		public void NewClassStaysIncompleteWhileItIsFilledInABatch()
+		{
+			var inner = ClassNode.Create();
+			var instance = InstanceOf(inner).Named("instance");
+			var f = new FloatNode().Named("f");
+			var outer = CreateClass(instance, f);
+
+			inner.BeginUpdate();
+			inner.AddBytes(4);
+
+			// A layout inside the batch (project handler) must not publish the half filled class.
+			inner.UpdateOffsets();
+			outer.UpdateOffsets();
+
+			Check.That(inner.IsLayoutComplete).IsFalse();
+			Check.That(instance.LayoutSize).IsEqualTo(-1);
+
+			inner.AddBytes(4);
+			inner.EndUpdate();
+
+			Check.That(inner.IsLayoutComplete).IsTrue();
+			CheckLayout(outer, (typeof(ClassInstanceNode), 0), (typeof(FloatNode), 8));
+			Check.That(instance.LayoutSize).IsEqualTo(8);
+		}
+
+		[Fact]
+		public void ChildNotificationInsideABatchCompensatesImmediately()
+		{
+			var text = Text8(4).Named("text");
+			var c = new Hex32Node().Named("c");
+			var classNode = CreateClass(text, new Hex32Node().Named("b"), c);
+
+			classNode.BeginUpdate();
+
+			// A hot spot edit notifies the class directly, the class compensates at once and stays complete.
+			text.Update(new HotSpot { Id = 0, Text = "8", Node = text });
+
+			Check.That(classNode.Nodes.Count).IsEqualTo(2);
+			Check.That(c.Offset).IsEqualTo(8);
+			Check.That(classNode.IsLayoutComplete).IsTrue();
+
+			classNode.EndUpdate();
+
+			CheckLayout(classNode, (typeof(Utf8TextNode), 0), (typeof(Hex32Node), 8));
+			Check.That(classNode.Nodes[1]).IsSameReferenceAs(c);
+		}
+
+		private sealed class CountingUnion : UnionNode
+		{
+			public int Layouts { get; set; }
+
+			public override void UpdateOffsets()
+			{
+				Layouts++;
+
+				base.UpdateOffsets();
+			}
+		}
+
+		[Fact]
+		public void NestedContainersAreSettledOncePerLayoutPass()
+		{
+			var union = new CountingUnion();
+			union.AddNode(new Hex32Node());
+
+			// The same union is referenced twice by the class.
+			var outer = CreateClass(ArrayOf(union, 2).Named("first"), ArrayOf(union, 3).Named("second"));
+
+			union.Layouts = 0;
+			outer.UpdateOffsets();
+
+			Check.That(union.Layouts).IsEqualTo(1);
+			CheckLayout(outer, (typeof(ArrayNode), 0), (typeof(ArrayNode), 8));
+			Check.That(outer.MemorySize).IsEqualTo(20);
+
+			// A pass over several classes settles the shared container once too.
+			var other = CreateClass(ArrayOf(union, 1).Named("third"), new FloatNode().Named("f"));
+
+			union.Layouts = 0;
+			BaseContainerNode.UpdateOffsets(new BaseContainerNode[] { outer, other });
+
+			Check.That(union.Layouts).IsEqualTo(1);
+			Check.That(other.Nodes[1].Offset).IsEqualTo(4);
+		}
+
+		[Fact]
+		public void LayoutPassOverSeveralContainersCompensatesEveryContainer()
+		{
+			var text1 = Text8(4).Named("text1");
+			var c1 = new Hex32Node().Named("c1");
+			var class1 = CreateClass(text1, new Hex32Node().Named("b1"), c1);
+
+			var text2 = Text8(4).Named("text2");
+			var c2 = new Hex32Node().Named("c2");
+			var class2 = CreateClass(text2, new Hex32Node().Named("b2"), c2);
+
+			text1.Length = 8;
+			text2.Length = 8;
+
+			BaseContainerNode.UpdateOffsets(new BaseContainerNode[] { class1, class2 });
+
+			CheckLayout(class1, (typeof(Utf8TextNode), 0), (typeof(Hex32Node), 8));
+			Check.That(class1.Nodes[1]).IsSameReferenceAs(c1);
+			CheckLayout(class2, (typeof(Utf8TextNode), 0), (typeof(Hex32Node), 8));
+			Check.That(class2.Nodes[1]).IsSameReferenceAs(c2);
+		}
+
+		[Fact]
+		public void ReferencedClassIsSettledBeforeTheReferencingClassInAPass()
+		{
+			var x = new Hex32Node().Named("x");
+			var inner = CreateClass(x);
+
+			var o = new Hex32Node().Named("o");
+			var outer = CreateClass(InstanceOf(inner), new Hex32Node().Named("pad"), o);
+
+			// Redirect the notifications of the inner class so the outer class is not updated automatically.
+			InstanceOf(inner);
+
+			inner.ReplaceChildNode(x, new Hex64Node());
+
+			// The outer class comes first in the pass but the inner class is settled before it is used.
+			BaseContainerNode.UpdateOffsets(new BaseContainerNode[] { outer, inner });
+
+			CheckLayout(outer, (typeof(ClassInstanceNode), 0), (typeof(Hex32Node), 8));
+			Check.That(outer.Nodes[1]).IsSameReferenceAs(o);
 		}
 
 		[Fact]
