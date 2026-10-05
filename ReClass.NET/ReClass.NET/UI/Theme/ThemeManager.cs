@@ -470,15 +470,31 @@ namespace ReClassNET.UI.Theme
 					break;
 				case ListBox listBox:
 					listBox.DrawItem -= listBoxDrawItemHandler;
+					if (ReleaseOwnerDraw(listBox))
+					{
+						listBox.DrawMode = DrawMode.Normal;
+					}
 					break;
 				case ComboBox comboBox:
 					comboBox.DrawItem -= comboBoxDrawItemHandler;
+					if (ReleaseOwnerDraw(comboBox))
+					{
+						comboBox.DrawMode = DrawMode.Normal;
+					}
 					break;
 				case TreeView treeView:
 					treeView.DrawNode -= treeViewDrawNodeHandler;
+					if (ReleaseOwnerDraw(treeView))
+					{
+						treeView.DrawMode = TreeViewDrawMode.Normal;
+					}
 					break;
 				case TabControl tabControl:
 					tabControl.DrawItem -= tabControlDrawItemHandler;
+					if (ReleaseOwnerDraw(tabControl))
+					{
+						tabControl.DrawMode = TabDrawMode.Normal;
+					}
 					break;
 			}
 
@@ -520,6 +536,22 @@ namespace ReClassNET.UI.Theme
 			return control != null && ownerDrawnByTheme.Contains(control);
 		}
 
+		/// <summary>
+		/// Gives the drawing of a control claimed by <see cref="ClaimOwnerDraw"/> back to the stock implementation.
+		/// </summary>
+		/// <returns>True if the control was owner drawn by the theme.</returns>
+		private static bool ReleaseOwnerDraw(Control control)
+		{
+			if (!ownerDrawnByTheme.Remove(control))
+			{
+				return false;
+			}
+
+			control.Disposed -= ownerDrawnDisposedHandler;
+
+			return true;
+		}
+
 		private static void AttachOverlays(Control control)
 		{
 			switch (control)
@@ -527,7 +559,7 @@ namespace ReClassNET.UI.Theme
 				case TabControl tabControl when IsOwnerDrawnByTheme(tabControl):
 					TabControlOverlay.Attach(tabControl);
 					break;
-				case ComboBox comboBox:
+				case ComboBox comboBox when IsOwnerDrawnByTheme(comboBox):
 					ComboBoxOverlay.Attach(comboBox);
 					break;
 				case DataGridView grid when grid.BorderStyle == BorderStyle.FixedSingle:
@@ -714,12 +746,15 @@ namespace ReClassNET.UI.Theme
 		{
 			var p = Palette;
 
-			comboBox.FlatStyle = FlatStyle.Flat;
 			comboBox.BackColor = p.ControlBackground;
 			comboBox.ForeColor = p.Text;
 
 			if (ClaimOwnerDraw(comboBox, comboBox.DrawMode == DrawMode.Normal))
 			{
+				// The flat frame is repainted in palette colors by ComboBoxOverlay. Combo boxes which are owner drawn
+				// by someone else (plugins) keep their style and only get the colors.
+				comboBox.FlatStyle = FlatStyle.Flat;
+
 				// The selected item and the focused edit area would use the system highlight colors otherwise.
 				comboBox.DrawMode = DrawMode.OwnerDrawFixed;
 				comboBox.DrawItem -= comboBoxDrawItemHandler;
@@ -1247,7 +1282,7 @@ namespace ReClassNET.UI.Theme
 
 			var p = Palette;
 			var enabled = comboBox.Enabled;
-			var active = enabled && (comboBox.Focused || comboBox.DroppedDown);
+			var active = enabled && (comboBox.ContainsFocus || comboBox.DroppedDown);
 
 			var buttonWidth = Math.Min(SystemInformation.HorizontalScrollBarArrowWidth, client.Width / 2);
 			var button = new Rectangle(client.Right - buttonWidth - 1, client.Top + 1, buttonWidth, client.Height - 2);

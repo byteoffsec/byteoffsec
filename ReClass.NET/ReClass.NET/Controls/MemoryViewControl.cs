@@ -176,12 +176,8 @@ namespace ReClassNET.Controls
 		/// <returns>True if the node is a class or a child of its parent container, false otherwise.</returns>
 		private static bool IsAttached(BaseNode node)
 		{
-			if (node is ClassNode)
-			{
-				return true;
-			}
-
-			return node.GetParentContainer()?.ContainsNode(node) == true;
+			// Detached nodes lose their parent, so this stays O(1) for the repaint timer and the key handling.
+			return node.IsAttached;
 		}
 
 		/// <summary>

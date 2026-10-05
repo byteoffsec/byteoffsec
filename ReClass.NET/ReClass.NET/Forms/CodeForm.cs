@@ -36,6 +36,7 @@ namespace ReClassNET.Forms
 			// The code box carries its own syntax colors. The generic theming must not touch it: setting the fore color
 			// of a rich text box recolors all existing text, which would wipe the highlighting after the RTF was streamed in.
 			ThemeManager.Exclude(codeRichTextBox);
+			codeRichTextBox.HandleCreated += (_, _2) => NativeTheming.ApplyScrollBars(codeRichTextBox, ThemeManager.IsDark);
 			ApplyCodeBoxTheme();
 
 			codeRichTextBox.SetInnerMargin(5, 5, 5, 5);
@@ -77,6 +78,9 @@ namespace ReClassNET.Forms
 
 			codeRichTextBox.BackColor = palette.ContentBackground;
 			codeRichTextBox.ForeColor = palette.Text;
+
+			// Excluded controls don't get the system drawn parts themed by ThemeManager.
+			NativeTheming.ApplyScrollBars(codeRichTextBox, palette.IsDark);
 		}
 
 		/// <summary>Colorizes the code with the style sheet of the current theme.</summary>

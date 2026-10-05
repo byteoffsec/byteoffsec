@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 
 namespace ReClassNET.Nodes
 {
@@ -12,6 +12,13 @@ namespace ReClassNET.Nodes
 
 		/// <summary>True to perform class cycle checks when changing the inner node.</summary>
 		protected abstract bool PerformCycleCheck { get; }
+
+		/// <summary>
+		/// A wrapper with value semantics (array, class instance) is as big as its inner node, so it takes part in the
+		/// size compensation only if the inner node does (an array of functions gets its size from the disassembler).
+		/// Pointers have a fixed size and always participate.
+		/// </summary>
+		protected internal override bool ParticipatesInSizeCompensation => !PerformCycleCheck || InnerNode == null || InnerNode.ParticipatesInSizeCompensation;
 
 		/// <summary>
 		/// Should be called before <see cref="ChangeInnerNode"/> to test if the node can handle the inner node type.

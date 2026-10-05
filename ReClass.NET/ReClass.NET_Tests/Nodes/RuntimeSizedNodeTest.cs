@@ -143,6 +143,34 @@ namespace ReClass.NET_Tests.Nodes
 		}
 
 		[Fact]
+		public void RuntimeSizedNodeInsideAnArrayShiftsInsteadOfConsuming()
+		{
+			// Class [Array of Function a][Int32 health][Int32 ammo]: the array is as volatile as its inner node.
+			var f = new RuntimeSizedNode(8).Named("f");
+			var a = ArrayOf(f, 1).Named("a");
+			var health = new Int32Node().Named("health");
+			var ammo = new Int32Node().Named("ammo");
+			var classNode = CreateClass(a, health, ammo);
+
+			f.DiscoverSize(300);
+
+			CheckLayout(classNode, (typeof(ArrayNode), 0), (typeof(Int32Node), 300), (typeof(Int32Node), 304));
+			Check.That(classNode.Nodes[1]).IsSameReferenceAs(health);
+			Check.That(classNode.Nodes[2]).IsSameReferenceAs(ammo);
+			Check.That(classNode.MemorySize).IsEqualTo(308);
+
+			// A pointer to a runtime sized node has a fixed size and keeps compensating.
+			var p = new PointerNode();
+			p.ChangeInnerNode(new RuntimeSizedNode(8));
+			var tail = new Int32Node().Named("tail");
+			var other = CreateClass(p, new Hex32Node(), new Hex32Node(), tail);
+			other.ReplaceChildNode(p, new Hex32Node());
+
+			Check.That(other.Nodes[other.Nodes.Count - 1]).IsSameReferenceAs(tail);
+			Check.That(tail.Offset).IsEqualTo(IntPtr.Size + 8);
+		}
+
+		[Fact]
 		public void DiscoveredSizeOfAnOtherChildIsStillCompensated()
 		{
 			// The user intent for the other children stays intact.

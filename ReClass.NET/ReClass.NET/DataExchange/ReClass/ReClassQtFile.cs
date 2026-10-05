@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Linq;
@@ -81,16 +81,12 @@ namespace ReClassNET.DataExchange.ReClass
 			{
 				// Fill the class in one batch, otherwise a class stored after the classes which reference it
 				// grows node by node and the instances consume their successors (see BaseContainerNode.AddNode).
-				classNode.BeginUpdate();
-
-				ReadNodeElements(
+				classNode.AddNodes(ReadNodeElements(
 					classElement.Elements("Node"),
 					classNode,
 					classMap,
 					logger
-				).ForEach(classNode.AddNode);
-
-				classNode.EndUpdate();
+				));
 			}
 		}
 
