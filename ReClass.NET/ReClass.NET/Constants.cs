@@ -6,15 +6,23 @@
 
 		public const string ApplicationExecutableName = ApplicationName + ".exe";
 
-		public const string ApplicationVersion = "1.2";
+		public const string ApplicationVersion = "1.3";
+
+		/// <summary>Name of this custom build. Shown in the window title and the about dialog.</summary>
+		public const string Edition = "ByteOffSec Edition";
+
+		/// <summary>Full display name including the edition.</summary>
+		public const string ApplicationDisplayName = ApplicationName + " " + Edition;
 
 		public const string LauncherExecutableName = ApplicationName + "_Launcher.exe";
 
-		public const string Author = "KN4CK3R";
+		public const string Author = "KN4CK3R (ReClass.NET), ByteOffSec (this edition)";
 
-		public const string HomepageUrl = "https://github.com/ReClassNET/ReClass.NET";
+		public const string UpstreamHomepageUrl = "https://github.com/ReClassNET/ReClass.NET";
 
-		public const string HelpUrl = "https://github.com/ReClassNET/ReClass.NET/issues";
+		public const string HomepageUrl = "https://github.com/byteoffsec/byteoffsec/tree/main/ReClass.NET";
+
+		public const string HelpUrl = "https://github.com/byteoffsec/byteoffsec/issues";
 
 		public const string PluginUrl = "https://github.com/ReClassNET/ReClass.NET#plugins";
 

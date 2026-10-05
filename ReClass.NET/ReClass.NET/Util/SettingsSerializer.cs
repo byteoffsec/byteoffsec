@@ -1,6 +1,8 @@
+using System;
 using System.Diagnostics.Contracts;
 using System.IO;
 using System.Xml.Linq;
+using ReClassNET.UI.Theme;
 
 namespace ReClassNET.Util
 {
@@ -36,6 +38,7 @@ namespace ReClassNET.Util
 					XElementSerializer.TryRead(general, nameof(settings.StayOnTop), e => settings.StayOnTop = XElementSerializer.ToBool(e));
 					XElementSerializer.TryRead(general, nameof(settings.RunAsAdmin), e => settings.RunAsAdmin = XElementSerializer.ToBool(e));
 					XElementSerializer.TryRead(general, nameof(settings.RandomizeWindowTitle), e => settings.RandomizeWindowTitle = XElementSerializer.ToBool(e));
+					XElementSerializer.TryRead(general, nameof(settings.Theme), e => settings.Theme = Enum.TryParse<AppTheme>(XElementSerializer.ToString(e), true, out var theme) ? theme : settings.Theme);
 				}
 				var display = root?.Element(XmlDisplayElement);
 				if (display != null)
@@ -44,6 +47,7 @@ namespace ReClassNET.Util
 					XElementSerializer.TryRead(display, nameof(settings.ShowNodeOffset), e => settings.ShowNodeOffset = XElementSerializer.ToBool(e));
 					XElementSerializer.TryRead(display, nameof(settings.ShowNodeText), e => settings.ShowNodeText = XElementSerializer.ToBool(e));
 					XElementSerializer.TryRead(display, nameof(settings.HighlightChangedValues), e => settings.HighlightChangedValues = XElementSerializer.ToBool(e));
+					XElementSerializer.TryRead(display, nameof(settings.PreserveNodeOffsetsOnResize), e => settings.PreserveNodeOffsetsOnResize = XElementSerializer.ToBool(e));
 					XElementSerializer.TryRead(display, nameof(settings.ShowCommentFloat), e => settings.ShowCommentFloat = XElementSerializer.ToBool(e));
 					XElementSerializer.TryRead(display, nameof(settings.ShowCommentInteger), e => settings.ShowCommentInteger = XElementSerializer.ToBool(e));
 					XElementSerializer.TryRead(display, nameof(settings.ShowCommentPointer), e => settings.ShowCommentPointer = XElementSerializer.ToBool(e));
@@ -107,7 +111,8 @@ namespace ReClassNET.Util
 						XElementSerializer.ToXml(nameof(settings.LastProcess), settings.LastProcess),
 						XElementSerializer.ToXml(nameof(settings.StayOnTop), settings.StayOnTop),
 						XElementSerializer.ToXml(nameof(settings.RunAsAdmin), settings.RunAsAdmin),
-						XElementSerializer.ToXml(nameof(settings.RandomizeWindowTitle), settings.RandomizeWindowTitle)
+						XElementSerializer.ToXml(nameof(settings.RandomizeWindowTitle), settings.RandomizeWindowTitle),
+						XElementSerializer.ToXml(nameof(settings.Theme), settings.Theme.ToString())
 					),
 					new XElement(
 						XmlDisplayElement,
@@ -115,6 +120,7 @@ namespace ReClassNET.Util
 						XElementSerializer.ToXml(nameof(settings.ShowNodeOffset), settings.ShowNodeOffset),
 						XElementSerializer.ToXml(nameof(settings.ShowNodeText), settings.ShowNodeText),
 						XElementSerializer.ToXml(nameof(settings.HighlightChangedValues), settings.HighlightChangedValues),
+						XElementSerializer.ToXml(nameof(settings.PreserveNodeOffsetsOnResize), settings.PreserveNodeOffsetsOnResize),
 						XElementSerializer.ToXml(nameof(settings.ShowCommentFloat), settings.ShowCommentFloat),
 						XElementSerializer.ToXml(nameof(settings.ShowCommentInteger), settings.ShowCommentInteger),
 						XElementSerializer.ToXml(nameof(settings.ShowCommentPointer), settings.ShowCommentPointer),

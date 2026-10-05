@@ -1,5 +1,7 @@
 ﻿using System.Drawing;
 using System.Text;
+using ReClassNET.Nodes;
+using ReClassNET.UI.Theme;
 using ReClassNET.Util;
 
 namespace ReClassNET
@@ -15,6 +17,28 @@ namespace ReClassNET
 		public bool RunAsAdmin { get; set; } = false;
 
 		public bool RandomizeWindowTitle { get; set; } = false;
+
+		/// <summary>The visual theme of the application.</summary>
+		public AppTheme Theme { get; set; } = AppTheme.Dark;
+
+		// Node Editing Settings
+
+		private bool preserveNodeOffsetsOnResize = true;
+
+		/// <summary>
+		/// If true, changing the type / size of a node never moves the nodes below it (a growing node consumes the following bytes,
+		/// a shrinking node gets padded). If false the legacy behaviour is used where a growing node shifts all following nodes.
+		/// </summary>
+		public bool PreserveNodeOffsetsOnResize
+		{
+			get => preserveNodeOffsetsOnResize;
+			set
+			{
+				preserveNodeOffsetsOnResize = value;
+
+				ContainerLayoutPolicy.PreserveSuccessorOffsets = value;
+			}
+		}
 
 		// Node Drawing Settings
 

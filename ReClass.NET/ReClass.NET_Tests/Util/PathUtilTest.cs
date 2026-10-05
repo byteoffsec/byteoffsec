@@ -8,14 +8,19 @@ namespace ReClass.NET_Tests.Util
 {
 	public class PathUtilTest
 	{
-		public static IEnumerable<object[]> GetTestConversionData() => new List<object[]>
+		public static IEnumerable<object[]> GetTestConversionData()
 		{
-			new object[] { string.Empty, string.Empty },
-			new object[] { "C:/", "C:" + Path.DirectorySeparatorChar },
-			new object[] { @"C:\", "C:" + Path.DirectorySeparatorChar },
-			new object[] { "C:/test.test", Path.Combine("C:" + Path.DirectorySeparatorChar, "test.test") },
-			new object[] { "file:///C:/test.test", Path.Combine("C:" + Path.DirectorySeparatorChar, "test.test") },
-		};
+			yield return new object[] { string.Empty, string.Empty };
+			yield return new object[] { "C:/", "C:" + Path.DirectorySeparatorChar };
+			yield return new object[] { "C:/test.test", Path.Combine("C:" + Path.DirectorySeparatorChar, "test.test") };
+			yield return new object[] { "file:///C:/test.test", Path.Combine("C:" + Path.DirectorySeparatorChar, "test.test") };
+
+			if (Path.DirectorySeparatorChar == '\\')
+			{
+				// Backslashes are only path separators on Windows.
+				yield return new object[] { @"C:\", "C:" + Path.DirectorySeparatorChar };
+			}
+		}
 
 		[Theory]
 		[MemberData(nameof(GetTestConversionData))]
