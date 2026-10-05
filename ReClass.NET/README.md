@@ -9,6 +9,25 @@ long-standing node editing problems of the original.
 > Based on upstream ReClass.NET master (`a02fcb9`, which is v1.2 plus later fixes) by KN4CK3R,
 > MIT licensed. See [UPSTREAM.md](UPSTREAM.md) for how the fork tracks upstream.
 
+## Screenshots
+
+Rendered by the Linux build under Mono (the Windows build looks the same apart from native title bars and scroll bars).
+
+| Dark theme (default) | Light theme |
+|---|---|
+| ![Dark theme](docs/dark-main.png) | ![Light theme](docs/light-main.png) |
+
+| Settings with the theme switch | Node context menu |
+|---|---|
+| ![Settings](docs/dark-settings.png) | ![Context menu](docs/dark-context.png) |
+
+Changing the `Hex32` at offset 8 to a `Vector3` asks before it would swallow the two fields below, and the
+`Hex32` at offset 0 becomes a `Vector3` without moving `health` and `ammo`:
+
+| Confirmation before consuming defined fields | After the change: `health` still at 0x0C, `ammo` at 0x10 |
+|---|---|
+| ![Confirmation](docs/type-change-confirm.png) | ![After](docs/type-change-after.png) |
+
 ## What is different
 
 ### Node editing no longer breaks the offsets below the edited node
