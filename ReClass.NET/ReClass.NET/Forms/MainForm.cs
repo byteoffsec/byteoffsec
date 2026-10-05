@@ -77,8 +77,6 @@ namespace ReClassNET.Forms
 			InitializeComponent();
 			UpdateWindowTitle();
 
-			mainMenuStrip.Renderer = new CustomToolStripProfessionalRenderer(true, true);
-			toolStrip.Renderer = new CustomToolStripProfessionalRenderer(true, false);
 			isLittleEndianToolStripMenuItem.Checked = BitConverter.IsLittleEndian;
 
 			Program.RemoteProcess.ProcessAttached += sender =>

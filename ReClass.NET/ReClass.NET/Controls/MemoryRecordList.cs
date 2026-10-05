@@ -8,6 +8,7 @@ using ReClassNET.Extensions;
 using ReClassNET.Memory;
 using ReClassNET.MemoryScanner;
 using ReClassNET.UI;
+using ReClassNET.UI.Theme;
 
 namespace ReClassNET.Controls
 {
@@ -106,14 +107,14 @@ namespace ReClassNET.Controls
 				var record = (MemoryRecord)resultDataGridView.Rows[e.RowIndex].DataBoundItem;
 				if (record.IsRelativeAddress)
 				{
-					e.CellStyle.ForeColor = Color.ForestGreen;
+					e.CellStyle.ForeColor = ThemeManager.IsDark ? Color.FromArgb(0x4E, 0xC9, 0xB0) : Color.ForestGreen;
 					e.FormattingApplied = true;
 				}
 			}
 			else if (e.ColumnIndex == 3) // Value
 			{
 				var record = (MemoryRecord)resultDataGridView.Rows[e.RowIndex].DataBoundItem;
-				e.CellStyle.ForeColor = record.HasChangedValue ? Color.Red : Color.Black;
+				e.CellStyle.ForeColor = record.HasChangedValue ? ThemeManager.Palette.Accent : ThemeManager.Palette.Text;
 				e.FormattingApplied = true;
 			}
 		}

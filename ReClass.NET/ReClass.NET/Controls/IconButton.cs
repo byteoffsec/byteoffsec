@@ -2,9 +2,9 @@ using System;
 using System.ComponentModel;
 using System.Diagnostics.Contracts;
 using System.Drawing;
-using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 using System.Windows.Forms.Design;
+using ReClassNET.UI.Theme;
 
 namespace ReClassNET.Controls
 {
@@ -19,8 +19,6 @@ namespace ReClassNET.Controls
 
 		public Image Image { get; set; }
 		public Rectangle ImageRectangle { get; } = new Rectangle(3, 3, 16, 16);
-
-		private readonly ProfessionalColorTable colorTable = new ProfessionalColorTable();
 
 		public IconButton()
 		{
@@ -107,7 +105,7 @@ namespace ReClassNET.Controls
 
 			if (drawHotBorder)
 			{
-				using var pen = new Pen(colorTable.ButtonSelectedBorder);
+				using var pen = new Pen(ThemeManager.Palette.HoverBorder);
 
 				g.DrawRectangle(pen, bounds.X, bounds.Y, bounds.Width - 1, bounds.Height - 1);
 			}
@@ -122,7 +120,7 @@ namespace ReClassNET.Controls
 				return;
 			}
 
-			using var brush = new LinearGradientBrush(bounds, colorTable.ButtonPressedGradientBegin, colorTable.ButtonPressedGradientEnd, LinearGradientMode.Vertical);
+			using var brush = new SolidBrush(ThemeManager.Palette.Pressed);
 
 			g.FillRectangle(brush, bounds);
 		}
@@ -136,7 +134,7 @@ namespace ReClassNET.Controls
 				return;
 			}
 
-			using var brush = new LinearGradientBrush(bounds, colorTable.ButtonSelectedGradientBegin, colorTable.ButtonSelectedGradientEnd, LinearGradientMode.Vertical);
+			using var brush = new SolidBrush(ThemeManager.Palette.Hover);
 
 			g.FillRectangle(brush, bounds);
 		}

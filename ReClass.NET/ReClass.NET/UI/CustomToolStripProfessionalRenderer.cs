@@ -1,52 +1,34 @@
-﻿using System.Drawing;
+using System.Drawing;
 using System.Windows.Forms;
+using ReClassNET.UI.Theme;
 
 namespace ReClassNET.UI
 {
-	internal class CustomToolStripProfessionalRenderer : ToolStripProfessionalRenderer
+	/// <summary>
+	/// Legacy renderer kept for plugins. It now delegates to the theme aware <see cref="ThemedToolStripRenderer"/>.
+	/// </summary>
+	internal class CustomToolStripProfessionalRenderer : ThemedToolStripRenderer
 	{
-		private readonly bool renderGrip;
-		private readonly bool renderBorder;
-
 		public CustomToolStripProfessionalRenderer(bool renderGrip, bool renderBorder)
-			: base(new CustomProfessionalColorTable())
 		{
-			this.renderGrip = renderGrip;
-			this.renderBorder = renderBorder;
-		}
-
-		protected override void OnRenderGrip(ToolStripGripRenderEventArgs e)
-		{
-			if (renderGrip)
-			{
-				base.OnRenderGrip(e);
-			}
-		}
-
-		protected override void OnRenderToolStripBorder(ToolStripRenderEventArgs e)
-		{
-			if (renderBorder)
-			{
-				base.OnRenderToolStripBorder(e);
-			}
-		}
-
-		protected override void OnRenderToolStripPanelBackground(ToolStripPanelRenderEventArgs e)
-		{
-			//base.OnRenderToolStripPanelBackground(e);
+			ShowGrip = renderGrip;
+			RenderToolBarSeparatorLine = renderBorder;
 		}
 	}
 
-	internal class CustomProfessionalColorTable : ProfessionalColorTable
+	/// <summary>
+	/// Legacy color table kept for plugins. It follows the current <see cref="ThemePalette"/>.
+	/// </summary>
+	internal class CustomProfessionalColorTable : ThemedColorTable
 	{
-		public override Color MenuStripGradientBegin => SystemColors.Control;
+		public override Color MenuStripGradientBegin => ThemeManager.Palette.MenuBackground;
 
-		public override Color MenuStripGradientEnd => SystemColors.Control;
+		public override Color MenuStripGradientEnd => ThemeManager.Palette.MenuBackground;
 
-		public override Color ToolStripGradientBegin => SystemColors.Control;
+		public override Color ToolStripGradientBegin => ThemeManager.Palette.MenuBackground;
 
-		public override Color ToolStripGradientMiddle => SystemColors.Control;
+		public override Color ToolStripGradientMiddle => ThemeManager.Palette.MenuBackground;
 
-		public override Color ToolStripGradientEnd => SystemColors.Control;
+		public override Color ToolStripGradientEnd => ThemeManager.Palette.MenuBackground;
 	}
 }

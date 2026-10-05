@@ -2,9 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Drawing;
-using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.Linq;
+using ReClassNET.UI.Theme;
 
 namespace ReClassNET.UI
 {
@@ -29,7 +29,9 @@ namespace ReClassNET.UI
 			Contract.Requires(title != null);
 			Contract.Requires(text != null);
 
-			var bannerId = $"{bannerWidth}x{bannerHeight}:{title}:{text}";
+			var palette = ThemeManager.Palette;
+
+			var bannerId = $"{palette.Theme}:{bannerWidth}x{bannerHeight}:{title}:{text}";
 
 			if (skipCache || !imageCache.TryGetValue(bannerId, out var image))
 			{
@@ -39,9 +41,15 @@ namespace ReClassNET.UI
 					int xIcon = DpiScaleInt(10, bannerHeight);
 
 					var rect = new Rectangle(0, 0, bannerWidth, bannerHeight);
-					using (var brush = new LinearGradientBrush(rect, Color.FromArgb(151, 154, 173), Color.FromArgb(27, 27, 37), LinearGradientMode.Vertical))
+					using (var brush = new SolidBrush(palette.BannerBackground))
 					{
 						g.FillRectangle(brush, rect);
+					}
+
+					var accentHeight = Math.Max(1, DpiScaleInt(2, bannerHeight));
+					using (var brush = new SolidBrush(palette.Accent))
+					{
+						g.FillRectangle(brush, 0, bannerHeight - accentHeight, bannerWidth, accentHeight);
 					}
 
 					int wIconScaled = StdIconDim;
@@ -64,7 +72,7 @@ namespace ReClassNET.UI
 						var attributes = new ImageAttributes();
 						attributes.SetColorMatrix(new ColorMatrix
 						{
-							Matrix33 = 0.1f
+							Matrix33 = palette.IsDark ? 0.08f : 0.1f
 						});
 
 						int w = wIconScaled * 2;
@@ -84,7 +92,7 @@ namespace ReClassNET.UI
 					float fontSize = DpiScaleFloat((12.0f * 96.0f) / g.DpiY, bannerHeight);
 					using (var font = new Font(FontFamily.GenericSansSerif, fontSize, FontStyle.Bold))
 					{
-						DrawText(g, title, tx, ty, font, Color.White);
+						DrawText(g, title, tx, ty, font, palette.BannerText);
 					}
 
 					tx += xIcon;
@@ -93,7 +101,7 @@ namespace ReClassNET.UI
 					float fontSizeSmall = DpiScaleFloat((9.0f * 96.0f) / g.DpiY, bannerHeight);
 					using (var fontSmall = new Font(FontFamily.GenericSansSerif, fontSizeSmall, FontStyle.Regular))
 					{
-						DrawText(g, text, tx, ty, fontSmall, Color.White);
+						DrawText(g, text, tx, ty, fontSmall, palette.BannerText);
 					}
 				}
 

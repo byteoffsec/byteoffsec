@@ -1,8 +1,9 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Linq;
 using System.Windows.Forms;
+using ReClassNET.UI.Theme;
 
 namespace ReClassNET.UI
 {
@@ -36,6 +37,9 @@ namespace ReClassNET.UI
 
 			form.TopMost = Program.Settings.StayOnTop;
 
+			// Forms of the application theme themselves (IconForm), plugin forms get themed here.
+			ThemeManager.Attach(form);
+
 			WindowAdded?.Invoke(null, new GlobalWindowManagerEventArgs(form));
 		}
 
@@ -45,6 +49,8 @@ namespace ReClassNET.UI
 
 			if (windows.Remove(form))
 			{
+				ThemeManager.Detach(form);
+
 				WindowRemoved?.Invoke(null, new GlobalWindowManagerEventArgs(form));
 			}
 		}

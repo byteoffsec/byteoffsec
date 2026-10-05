@@ -45,6 +45,10 @@ namespace ReClassNET.Forms
             this.showIntegerCheckBox = new System.Windows.Forms.CheckBox();
             this.showFloatCheckBox = new System.Windows.Forms.CheckBox();
             this.displayGroupBox = new System.Windows.Forms.GroupBox();
+            this.preserveNodeOffsetsCheckBox = new System.Windows.Forms.CheckBox();
+            this.appearanceGroupBox = new System.Windows.Forms.GroupBox();
+            this.themeComboBox = new ReClassNET.Forms.SettingsForm.ThemeComboBox();
+            this.themeLabel = new System.Windows.Forms.Label();
             this.randomizeWindowTitleCheckBox = new System.Windows.Forms.CheckBox();
             this.runAsAdminCheckBox = new System.Windows.Forms.CheckBox();
             this.highlightChangedValuesCheckBox = new System.Windows.Forms.CheckBox();
@@ -82,6 +86,8 @@ namespace ReClassNET.Forms
             this.nodeNameColorBox = new ReClassNET.Controls.ColorBox();
             this.backgroundLabel = new System.Windows.Forms.Label();
             this.backgroundColorBox = new ReClassNET.Controls.ColorBox();
+            this.darkDefaultsButton = new System.Windows.Forms.Button();
+            this.lightDefaultsButton = new System.Windows.Forms.Button();
             this.typeDefinitionsSettingsTabPage = new System.Windows.Forms.TabPage();
             this.nuintSettingsLabel = new System.Windows.Forms.Label();
             this.nuintTypeTextBox = new System.Windows.Forms.TextBox();
@@ -136,6 +142,7 @@ namespace ReClassNET.Forms
             this.fileAssociationGroupBox.SuspendLayout();
             this.commentsGroupBox.SuspendLayout();
             this.displayGroupBox.SuspendLayout();
+            this.appearanceGroupBox.SuspendLayout();
             this.colorsSettingTabPage.SuspendLayout();
             this.nodeColorGroupBox.SuspendLayout();
             this.typeDefinitionsSettingsTabPage.SuspendLayout();
@@ -155,6 +162,7 @@ namespace ReClassNET.Forms
             // 
             // generalSettingsTabPage
             // 
+            this.generalSettingsTabPage.Controls.Add(this.appearanceGroupBox);
             this.generalSettingsTabPage.Controls.Add(this.fileAssociationGroupBox);
             this.generalSettingsTabPage.Controls.Add(this.commentsGroupBox);
             this.generalSettingsTabPage.Controls.Add(this.displayGroupBox);
@@ -172,9 +180,9 @@ namespace ReClassNET.Forms
             this.fileAssociationGroupBox.Controls.Add(this.removeAssociationButton);
             this.fileAssociationGroupBox.Controls.Add(this.createAssociationButton);
             this.fileAssociationGroupBox.Controls.Add(this.associationInfoLabel);
-            this.fileAssociationGroupBox.Location = new System.Drawing.Point(6, 231);
+            this.fileAssociationGroupBox.Location = new System.Drawing.Point(6, 243);
             this.fileAssociationGroupBox.Name = "fileAssociationGroupBox";
-            this.fileAssociationGroupBox.Size = new System.Drawing.Size(542, 85);
+            this.fileAssociationGroupBox.Size = new System.Drawing.Size(542, 83);
             this.fileAssociationGroupBox.TabIndex = 4;
             this.fileAssociationGroupBox.TabStop = false;
             this.fileAssociationGroupBox.Text = "RCNET File Association";
@@ -221,7 +229,7 @@ namespace ReClassNET.Forms
             this.commentsGroupBox.Controls.Add(this.showFloatCheckBox);
             this.commentsGroupBox.Location = new System.Drawing.Point(6, 39);
             this.commentsGroupBox.Name = "commentsGroupBox";
-            this.commentsGroupBox.Size = new System.Drawing.Size(265, 186);
+            this.commentsGroupBox.Size = new System.Drawing.Size(265, 198);
             this.commentsGroupBox.TabIndex = 3;
             this.commentsGroupBox.TabStop = false;
             this.commentsGroupBox.Text = "Node Comments";
@@ -300,13 +308,14 @@ namespace ReClassNET.Forms
             // 
             this.displayGroupBox.Controls.Add(this.randomizeWindowTitleCheckBox);
             this.displayGroupBox.Controls.Add(this.runAsAdminCheckBox);
+            this.displayGroupBox.Controls.Add(this.preserveNodeOffsetsCheckBox);
             this.displayGroupBox.Controls.Add(this.highlightChangedValuesCheckBox);
             this.displayGroupBox.Controls.Add(this.showTextCheckBox);
             this.displayGroupBox.Controls.Add(this.showNodeOffsetCheckBox);
             this.displayGroupBox.Controls.Add(this.showNodeAddressCheckBox);
-            this.displayGroupBox.Location = new System.Drawing.Point(283, 39);
+            this.displayGroupBox.Location = new System.Drawing.Point(283, 57);
             this.displayGroupBox.Name = "displayGroupBox";
-            this.displayGroupBox.Size = new System.Drawing.Size(265, 160);
+            this.displayGroupBox.Size = new System.Drawing.Size(265, 180);
             this.displayGroupBox.TabIndex = 2;
             this.displayGroupBox.TabStop = false;
             this.displayGroupBox.Text = "Display";
@@ -314,22 +323,32 @@ namespace ReClassNET.Forms
             // randomizeWindowTitleCheckBox
             // 
             this.randomizeWindowTitleCheckBox.AutoSize = true;
-            this.randomizeWindowTitleCheckBox.Location = new System.Drawing.Point(6, 134);
+            this.randomizeWindowTitleCheckBox.Location = new System.Drawing.Point(6, 157);
             this.randomizeWindowTitleCheckBox.Name = "randomizeWindowTitleCheckBox";
             this.randomizeWindowTitleCheckBox.Size = new System.Drawing.Size(137, 17);
-            this.randomizeWindowTitleCheckBox.TabIndex = 5;
+            this.randomizeWindowTitleCheckBox.TabIndex = 6;
             this.randomizeWindowTitleCheckBox.Text = "Randomize window title";
             this.randomizeWindowTitleCheckBox.UseVisualStyleBackColor = true;
             // 
             // runAsAdminCheckBox
             // 
             this.runAsAdminCheckBox.AutoSize = true;
-            this.runAsAdminCheckBox.Location = new System.Drawing.Point(6, 111);
+            this.runAsAdminCheckBox.Location = new System.Drawing.Point(6, 134);
             this.runAsAdminCheckBox.Name = "runAsAdminCheckBox";
             this.runAsAdminCheckBox.Size = new System.Drawing.Size(200, 17);
-            this.runAsAdminCheckBox.TabIndex = 4;
+            this.runAsAdminCheckBox.TabIndex = 5;
             this.runAsAdminCheckBox.Text = "Run as administrator (requires restart)";
             this.runAsAdminCheckBox.UseVisualStyleBackColor = true;
+            // 
+            // preserveNodeOffsetsCheckBox
+            // 
+            this.preserveNodeOffsetsCheckBox.AutoSize = true;
+            this.preserveNodeOffsetsCheckBox.Location = new System.Drawing.Point(6, 111);
+            this.preserveNodeOffsetsCheckBox.Name = "preserveNodeOffsetsCheckBox";
+            this.preserveNodeOffsetsCheckBox.Size = new System.Drawing.Size(207, 17);
+            this.preserveNodeOffsetsCheckBox.TabIndex = 4;
+            this.preserveNodeOffsetsCheckBox.Text = "Keep following node offsets on resize";
+            this.preserveNodeOffsetsCheckBox.UseVisualStyleBackColor = true;
             // 
             // highlightChangedValuesCheckBox
             // 
@@ -381,8 +400,37 @@ namespace ReClassNET.Forms
             this.stayOnTopCheckBox.Text = "Force ReClass.NET to stay on top";
             this.stayOnTopCheckBox.UseVisualStyleBackColor = true;
             // 
+            // appearanceGroupBox
+            // 
+            this.appearanceGroupBox.Controls.Add(this.themeComboBox);
+            this.appearanceGroupBox.Controls.Add(this.themeLabel);
+            this.appearanceGroupBox.Location = new System.Drawing.Point(283, 6);
+            this.appearanceGroupBox.Name = "appearanceGroupBox";
+            this.appearanceGroupBox.Size = new System.Drawing.Size(265, 45);
+            this.appearanceGroupBox.TabIndex = 5;
+            this.appearanceGroupBox.TabStop = false;
+            this.appearanceGroupBox.Text = "Appearance";
+            // 
+            // themeComboBox
+            // 
+            this.themeComboBox.Location = new System.Drawing.Point(56, 16);
+            this.themeComboBox.Name = "themeComboBox";
+            this.themeComboBox.Size = new System.Drawing.Size(140, 21);
+            this.themeComboBox.TabIndex = 1;
+            // 
+            // themeLabel
+            // 
+            this.themeLabel.AutoSize = true;
+            this.themeLabel.Location = new System.Drawing.Point(6, 19);
+            this.themeLabel.Name = "themeLabel";
+            this.themeLabel.Size = new System.Drawing.Size(43, 13);
+            this.themeLabel.TabIndex = 0;
+            this.themeLabel.Text = "Theme:";
+            // 
             // colorsSettingTabPage
             // 
+            this.colorsSettingTabPage.Controls.Add(this.darkDefaultsButton);
+            this.colorsSettingTabPage.Controls.Add(this.lightDefaultsButton);
             this.colorsSettingTabPage.Controls.Add(this.nodeColorGroupBox);
             this.colorsSettingTabPage.Controls.Add(this.backgroundLabel);
             this.colorsSettingTabPage.Controls.Add(this.backgroundColorBox);
@@ -666,6 +714,26 @@ namespace ReClassNET.Forms
             this.backgroundColorBox.Name = "backgroundColorBox";
             this.backgroundColorBox.Size = new System.Drawing.Size(123, 20);
             this.backgroundColorBox.TabIndex = 0;
+            // 
+            // darkDefaultsButton
+            // 
+            this.darkDefaultsButton.Location = new System.Drawing.Point(125, 276);
+            this.darkDefaultsButton.Name = "darkDefaultsButton";
+            this.darkDefaultsButton.Size = new System.Drawing.Size(110, 23);
+            this.darkDefaultsButton.TabIndex = 30;
+            this.darkDefaultsButton.Text = "&Dark Defaults";
+            this.darkDefaultsButton.UseVisualStyleBackColor = true;
+            this.darkDefaultsButton.Click += new System.EventHandler(this.darkDefaultsButton_Click);
+            // 
+            // lightDefaultsButton
+            // 
+            this.lightDefaultsButton.Location = new System.Drawing.Point(9, 276);
+            this.lightDefaultsButton.Name = "lightDefaultsButton";
+            this.lightDefaultsButton.Size = new System.Drawing.Size(110, 23);
+            this.lightDefaultsButton.TabIndex = 29;
+            this.lightDefaultsButton.Text = "&Light Defaults";
+            this.lightDefaultsButton.UseVisualStyleBackColor = true;
+            this.lightDefaultsButton.Click += new System.EventHandler(this.lightDefaultsButton_Click);
             // 
             // typeDefinitionsSettingsTabPage
             // 
@@ -1134,6 +1202,8 @@ namespace ReClassNET.Forms
             this.commentsGroupBox.PerformLayout();
             this.displayGroupBox.ResumeLayout(false);
             this.displayGroupBox.PerformLayout();
+            this.appearanceGroupBox.ResumeLayout(false);
+            this.appearanceGroupBox.PerformLayout();
             this.colorsSettingTabPage.ResumeLayout(false);
             this.colorsSettingTabPage.PerformLayout();
             this.nodeColorGroupBox.ResumeLayout(false);
@@ -1152,6 +1222,12 @@ namespace ReClassNET.Forms
 		private System.Windows.Forms.TabPage typeDefinitionsSettingsTabPage;
 		private System.Windows.Forms.CheckBox stayOnTopCheckBox;
 		private System.Windows.Forms.GroupBox displayGroupBox;
+		private System.Windows.Forms.CheckBox preserveNodeOffsetsCheckBox;
+		private System.Windows.Forms.GroupBox appearanceGroupBox;
+		private System.Windows.Forms.Label themeLabel;
+		private ThemeComboBox themeComboBox;
+		private System.Windows.Forms.Button lightDefaultsButton;
+		private System.Windows.Forms.Button darkDefaultsButton;
 		private System.Windows.Forms.CheckBox showNodeAddressCheckBox;
 		private System.Windows.Forms.CheckBox showTextCheckBox;
 		private System.Windows.Forms.CheckBox showNodeOffsetCheckBox;

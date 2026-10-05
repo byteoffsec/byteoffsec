@@ -8,6 +8,7 @@ using ReClassNET.Extensions;
 using ReClassNET.Memory;
 using ReClassNET.Nodes;
 using ReClassNET.UI;
+using ReClassNET.UI.Theme;
 using ReClassNET.Util;
 
 namespace ReClassNET.Controls
@@ -84,6 +85,8 @@ namespace ReClassNET.Controls
 			font = Program.MonoSpaceFont;
 
 			hotSpotEditBox.Font = font;
+
+			ThemeManager.Apply(nodeInfoToolTip);
 
 			memoryPreviewPopUp = new MemoryPreviewPopUp(font);
 		}

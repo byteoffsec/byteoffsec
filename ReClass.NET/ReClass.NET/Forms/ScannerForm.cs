@@ -16,6 +16,7 @@ using ReClassNET.Memory;
 using ReClassNET.MemoryScanner;
 using ReClassNET.MemoryScanner.Comparer;
 using ReClassNET.UI;
+using ReClassNET.UI.Theme;
 using ReClassNET.Util;
 
 namespace ReClassNET.Forms
@@ -45,8 +46,7 @@ namespace ReClassNET.Forms
 
 			InitializeComponent();
 
-			toolStripPanel.Renderer = new CustomToolStripProfessionalRenderer(true, false);
-			menuToolStrip.Renderer = new CustomToolStripProfessionalRenderer(false, false);
+			ThemeManager.Apply(infoToolTip);
 
 			SetGuiFromSettings(ScanSettings.Default);
 

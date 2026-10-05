@@ -1,17 +1,22 @@
 using System;
 using System.Diagnostics.Contracts;
+using System.Drawing;
+using System.Linq;
 using System.Windows.Forms;
 using ReClassNET.Controls;
 using ReClassNET.Extensions;
 using ReClassNET.Native;
 using ReClassNET.Project;
 using ReClassNET.UI;
+using ReClassNET.UI.Theme;
 using ReClassNET.Util;
 
 namespace ReClassNET.Forms
 {
 	public partial class SettingsForm : IconForm
 	{
+		internal class ThemeComboBox : EnumComboBox<AppTheme> { }
+
 		private readonly Settings settings;
 		private readonly CppTypeMapping typeMapping;
 
@@ -48,8 +53,8 @@ namespace ReClassNET.Forms
 			}
 			else
 			{
-				NativeMethodsWindows.SetButtonShield(createAssociationButton, true);
-				NativeMethodsWindows.SetButtonShield(removeAssociationButton, true);
+				SetShieldIcon(createAssociationButton);
+				SetShieldIcon(removeAssociationButton);
 			}
 		}
 
@@ -77,6 +82,75 @@ namespace ReClassNET.Forms
 			WinUtil.RunElevated(PathUtil.LauncherExecutablePath, $"-{Constants.CommandLineOptions.FileExtUnregister}");
 		}
 
+		private void themeComboBox_SelectedIndexChanged(object sender, EventArgs e)
+		{
+			var newTheme = themeComboBox.SelectedValue;
+			var oldTheme = settings.Theme;
+			if (newTheme == oldTheme)
+			{
+				return;
+			}
+
+			// Follow the theme with the node colors unless the user customized them.
+			if (settings.NodeColorsMatchPreset(oldTheme))
+			{
+				settings.ApplyNodeColorPreset(newTheme);
+
+				RefreshColorBindings();
+			}
+
+			settings.Theme = newTheme;
+
+			ThemeManager.SetTheme(newTheme);
+		}
+
+		private void lightDefaultsButton_Click(object sender, EventArgs e)
+		{
+			ApplyNodeColorPreset(AppTheme.Light);
+		}
+
+		private void darkDefaultsButton_Click(object sender, EventArgs e)
+		{
+			ApplyNodeColorPreset(AppTheme.Dark);
+		}
+
+		private void ApplyNodeColorPreset(AppTheme theme)
+		{
+			settings.ApplyNodeColorPreset(theme);
+
+			RefreshColorBindings();
+		}
+
+		/// <summary>Pushes the current node colors of the settings into the color boxes.</summary>
+		private void RefreshColorBindings()
+		{
+			foreach (var binding in colorsSettingTabPage.Controls.OfType<ColorBox>()
+				.Concat(nodeColorGroupBox.Controls.OfType<ColorBox>())
+				.SelectMany(c => c.DataBindings.Cast<Binding>()))
+			{
+				binding.ReadValue();
+			}
+		}
+
+		/// <summary>Shows the UAC shield on the button. The button stays a themed flat button.</summary>
+		private static void SetShieldIcon(Button button)
+		{
+			Contract.Requires(button != null);
+
+			try
+			{
+				using var icon = new Icon(SystemIcons.Shield, 16, 16);
+
+				button.Image = icon.ToBitmap();
+				button.ImageAlign = ContentAlignment.MiddleLeft;
+				button.TextImageRelation = TextImageRelation.ImageBeforeText;
+			}
+			catch
+			{
+				// ignored
+			}
+		}
+
 		private static void SetBinding(IBindableComponent control, string propertyName, object dataSource, string dataMember)
 		{
 			Contract.Requires(control != null);
@@ -92,10 +166,14 @@ namespace ReClassNET.Forms
 			SetBinding(stayOnTopCheckBox, nameof(CheckBox.Checked), settings, nameof(Settings.StayOnTop));
 			stayOnTopCheckBox.CheckedChanged += (_, _2) => GlobalWindowManager.Windows.ForEach(w => w.TopMost = stayOnTopCheckBox.Checked);
 
+			themeComboBox.SelectedValue = settings.Theme;
+			themeComboBox.SelectedIndexChanged += themeComboBox_SelectedIndexChanged;
+
 			SetBinding(showNodeAddressCheckBox, nameof(CheckBox.Checked), settings, nameof(Settings.ShowNodeAddress));
 			SetBinding(showNodeOffsetCheckBox, nameof(CheckBox.Checked), settings, nameof(Settings.ShowNodeOffset));
 			SetBinding(showTextCheckBox, nameof(CheckBox.Checked), settings, nameof(Settings.ShowNodeText));
 			SetBinding(highlightChangedValuesCheckBox, nameof(CheckBox.Checked), settings, nameof(Settings.HighlightChangedValues));
+			SetBinding(preserveNodeOffsetsCheckBox, nameof(CheckBox.Checked), settings, nameof(Settings.PreserveNodeOffsetsOnResize));
 
 			SetBinding(showFloatCheckBox, nameof(CheckBox.Checked), settings, nameof(Settings.ShowCommentFloat));
 			SetBinding(showIntegerCheckBox, nameof(CheckBox.Checked), settings, nameof(Settings.ShowCommentInteger));

@@ -6,7 +6,7 @@ using ReClassNET.UI.Theme;
 
 namespace ReClassNET.Util
 {
-	internal sealed class SettingsSerializer
+	public sealed class SettingsSerializer
 	{
 		private const string XmlRootElement = "Settings";
 		private const string XmlGeneralElement = "General";
@@ -16,19 +16,51 @@ namespace ReClassNET.Util
 
 		#region Read Settings
 
+		/// <summary>Loads the settings from the settings file. Returns the defaults if the file does not exist or is unreadable.</summary>
 		public static Settings Load()
 		{
 			EnsureSettingsDirectoryAvailable();
 
-			var settings = new Settings();
-
 			try
 			{
 				var path = Path.Combine(PathUtil.SettingsFolderPath, Constants.SettingsFile);
+				if (!File.Exists(path))
+				{
+					return CreateDefault();
+				}
 
 				using var sr = new StreamReader(path);
 
-				var document = XDocument.Load(sr);
+				return Load(XDocument.Load(sr));
+			}
+			catch
+			{
+				return CreateDefault();
+			}
+		}
+
+		/// <summary>Creates the settings used on the first start: the default theme with its matching node colors.</summary>
+		public static Settings CreateDefault()
+		{
+			var settings = new Settings();
+			settings.ApplyNodeColorPreset(settings.Theme);
+
+			return settings;
+		}
+
+		/// <summary>Reads the settings from the given document.</summary>
+		/// <param name="document">The settings document.</param>
+		/// <returns>The settings. Values missing in the document keep their defaults.</returns>
+		public static Settings Load(XDocument document)
+		{
+			Contract.Requires(document != null);
+
+			var settings = new Settings();
+
+			var themeElementPresent = false;
+
+			try
+			{
 				var root = document.Root;
 
 				var general = root?.Element(XmlGeneralElement);
@@ -38,7 +70,13 @@ namespace ReClassNET.Util
 					XElementSerializer.TryRead(general, nameof(settings.StayOnTop), e => settings.StayOnTop = XElementSerializer.ToBool(e));
 					XElementSerializer.TryRead(general, nameof(settings.RunAsAdmin), e => settings.RunAsAdmin = XElementSerializer.ToBool(e));
 					XElementSerializer.TryRead(general, nameof(settings.RandomizeWindowTitle), e => settings.RandomizeWindowTitle = XElementSerializer.ToBool(e));
-					XElementSerializer.TryRead(general, nameof(settings.Theme), e => settings.Theme = Enum.TryParse<AppTheme>(XElementSerializer.ToString(e), true, out var theme) ? theme : settings.Theme);
+					themeElementPresent = XElementSerializer.TryRead(general, nameof(settings.Theme), e =>
+					{
+						if (Enum.TryParse<AppTheme>(XElementSerializer.ToString(e), true, out var theme))
+						{
+							settings.Theme = theme;
+						}
+					});
 				}
 				var display = root?.Element(XmlDisplayElement);
 				if (display != null)
@@ -72,6 +110,7 @@ namespace ReClassNET.Util
 					XElementSerializer.TryRead(colors, nameof(settings.CommentColor), e => settings.CommentColor = XElementSerializer.ToColor(e));
 					XElementSerializer.TryRead(colors, nameof(settings.TextColor), e => settings.TextColor = XElementSerializer.ToColor(e));
 					XElementSerializer.TryRead(colors, nameof(settings.VTableColor), e => settings.VTableColor = XElementSerializer.ToColor(e));
+					XElementSerializer.TryRead(colors, nameof(settings.PluginColor), e => settings.PluginColor = XElementSerializer.ToColor(e));
 				}
 				var customData = root?.Element(XmlCustomDataElement);
 				if (customData != null)
@@ -84,6 +123,12 @@ namespace ReClassNET.Util
 				// ignored
 			}
 
+			if (!themeElementPresent)
+			{
+				// Settings written by a version without themes: keep the look the user had, which is determined by the node colors.
+				settings.Theme = NodeColorPresets.GuessTheme(settings);
+			}
+
 			return settings;
 		}
 
@@ -91,6 +136,8 @@ namespace ReClassNET.Util
 
 		#region Write Settings
 
+		/// <summary>Writes the settings to the settings file.</summary>
+		/// <param name="settings">The settings to save.</param>
 		public static void Save(Settings settings)
 		{
 			Contract.Requires(settings != null);
@@ -101,7 +148,17 @@ namespace ReClassNET.Util
 
 			using var sw = new StreamWriter(path);
 
-			var document = new XDocument(
+			ToDocument(settings).Save(sw);
+		}
+
+		/// <summary>Converts the settings to a document.</summary>
+		/// <param name="settings">The settings to convert.</param>
+		/// <returns>The settings document.</returns>
+		public static XDocument ToDocument(Settings settings)
+		{
+			Contract.Requires(settings != null);
+
+			return new XDocument(
 				new XComment($"{Constants.ApplicationName} {Constants.ApplicationVersion} by {Constants.Author}"),
 				new XComment($"Website: {Constants.HomepageUrl}"),
 				new XElement(
@@ -143,13 +200,12 @@ namespace ReClassNET.Util
 						XElementSerializer.ToXml(nameof(settings.IndexColor), settings.IndexColor),
 						XElementSerializer.ToXml(nameof(settings.CommentColor), settings.CommentColor),
 						XElementSerializer.ToXml(nameof(settings.TextColor), settings.TextColor),
-						XElementSerializer.ToXml(nameof(settings.VTableColor), settings.VTableColor)
+						XElementSerializer.ToXml(nameof(settings.VTableColor), settings.VTableColor),
+						XElementSerializer.ToXml(nameof(settings.PluginColor), settings.PluginColor)
 					),
 					settings.CustomData.Serialize(XmlCustomDataElement)
 				)
 			);
-
-			document.Save(sw);
 		}
 
 		#endregion

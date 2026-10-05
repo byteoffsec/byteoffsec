@@ -1,4 +1,4 @@
-﻿using System.Drawing;
+using System.Drawing;
 using System.Text;
 using ReClassNET.Nodes;
 using ReClassNET.UI.Theme;
@@ -99,6 +99,21 @@ namespace ReClassNET
 		public Color PluginColor { get; set; } = Color.FromArgb(255, 0, 255);
 
 		public CustomDataMap CustomData { get; } = new CustomDataMap();
+
+		/// <summary>Replaces all node colors with the shipped preset of the given theme.</summary>
+		/// <param name="theme">The theme whose preset should be used.</param>
+		public void ApplyNodeColorPreset(AppTheme theme)
+		{
+			NodeColorPresets.ForTheme(theme).ApplyTo(this);
+		}
+
+		/// <summary>Checks if the node colors are equal to the shipped preset of the given theme.</summary>
+		/// <param name="theme">The theme whose preset should be compared.</param>
+		/// <returns>True if no node color was customized, false otherwise.</returns>
+		public bool NodeColorsMatchPreset(AppTheme theme)
+		{
+			return NodeColorPresets.ForTheme(theme).Matches(this);
+		}
 
 		public Settings Clone() => MemberwiseClone() as Settings;
 	}

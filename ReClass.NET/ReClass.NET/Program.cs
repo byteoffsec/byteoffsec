@@ -10,6 +10,7 @@ using ReClassNET.Logger;
 using ReClassNET.Memory;
 using ReClassNET.Native;
 using ReClassNET.UI;
+using ReClassNET.UI.Theme;
 using ReClassNET.Util;
 
 namespace ReClassNET
@@ -67,6 +68,8 @@ namespace ReClassNET
 
 			Settings = SettingsSerializer.Load();
 			Logger = new GuiLogger();
+
+			ThemeManager.Initialize(Settings.Theme);
 
 			if (!NativeMethods.IsUnix() && Settings.RunAsAdmin && !WinUtil.IsAdministrator)
 			{

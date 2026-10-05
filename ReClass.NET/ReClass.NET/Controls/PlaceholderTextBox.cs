@@ -32,6 +32,36 @@ namespace ReClassNET.Controls
 			SetStyle(ControlStyles.UserPaint, true);
 		}
 
+		protected override void OnFontChanged(EventArgs e)
+		{
+			base.OnFontChanged(e);
+
+			if (GetStyle(ControlStyles.UserPaint))
+			{
+				fontBackup = Font;
+			}
+		}
+
+		protected override void OnForeColorChanged(EventArgs e)
+		{
+			base.OnForeColorChanged(e);
+
+			if (GetStyle(ControlStyles.UserPaint))
+			{
+				foreColorBackup = ForeColor;
+			}
+		}
+
+		protected override void OnBackColorChanged(EventArgs e)
+		{
+			base.OnBackColorChanged(e);
+
+			if (GetStyle(ControlStyles.UserPaint))
+			{
+				backColorBackup = BackColor;
+			}
+		}
+
 		protected override void OnTextChanged(EventArgs e)
 		{
 			base.OnTextChanged(e);

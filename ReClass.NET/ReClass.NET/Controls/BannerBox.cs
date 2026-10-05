@@ -49,6 +49,12 @@ namespace ReClassNET.Controls
 			}
 		}
 
+		/// <summary>Re-renders the banner, e.g. after the theme changed.</summary>
+		public void RefreshBanner()
+		{
+			UpdateBanner();
+		}
+
 		public void BeginInit()
 		{
 			inInitialize = true;

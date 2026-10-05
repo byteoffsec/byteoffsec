@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Diagnostics.Contracts;
 using System.Drawing;
 using System.Windows.Forms;
+using ReClassNET.UI.Theme;
 
 namespace ReClassNET.Controls
 {
@@ -100,7 +101,10 @@ namespace ReClassNET.Controls
 			var rect = colorPanel.ClientRectangle;
 			rect.Width--;
 			rect.Height--;
-			e.Graphics.DrawRectangle(Pens.Black, rect);
+
+			using var pen = new Pen(ThemeManager.Palette.ControlBorder);
+
+			e.Graphics.DrawRectangle(pen, rect);
 		}
 	}
 }
