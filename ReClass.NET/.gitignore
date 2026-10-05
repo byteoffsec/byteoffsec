@@ -252,3 +252,7 @@ paket-files/
 *.sln.iml
 
 /ReClass.NET/Resources/BuildDate.txt
+
+# The symbol server DLLs live in platform folders which the build-output patterns above would hide.
+!/Dependencies/x64/
+!/Dependencies/x86/
