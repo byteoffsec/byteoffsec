@@ -33,7 +33,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Remove="Makefile" />
     <Reference Include="System.IO.Compression" />
     <Reference Include="System.Xml.Linq" />
   </ItemGroup>

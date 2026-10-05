@@ -1,0 +1,152 @@
+name: Build ReClass.NET ByteOffSec Edition
+
+on:
+  push:
+    branches: [ main, 'claude/**' ]
+    tags: [ 'v*' ]
+    paths:
+      - 'ReClass.NET/**'
+      - '.github/workflows/build.yml'
+  pull_request:
+    paths:
+      - 'ReClass.NET/**'
+      - '.github/workflows/build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+defaults:
+  run:
+    working-directory: ReClass.NET
+
+jobs:
+  windows:
+    name: Windows (native + managed + tests + package)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: microsoft/setup-msbuild@v2
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Build NativeCore (x86 / x64)
+        shell: pwsh
+        run: |
+          $sln = "${{ github.workspace }}\ReClass.NET\"
+          msbuild NativeCore\Windows\NativeCore.vcxproj /m /nologo /v:m /p:Configuration=Release /p:Platform=Win32 "/p:SolutionDir=$sln"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          msbuild NativeCore\Windows\NativeCore.vcxproj /m /nologo /v:m /p:Configuration=Release /p:Platform=x64 "/p:SolutionDir=$sln"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build managed projects (x86 / x64 / launcher)
+        shell: pwsh
+        run: |
+          dotnet build ReClass.NET\ReClass.NET.csproj -c Release -p:Platform=x86 -nologo
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          dotnet build ReClass.NET\ReClass.NET.csproj -c Release -p:Platform=x64 -nologo
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          dotnet build ReClass.NET_Launcher\ReClass.NET_Launcher.csproj -c Release -nologo
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Test (x64)
+        run: dotnet test ReClass.NET_Tests\ReClass.NET_Tests.csproj -c Release -p:Platform=x64 -nologo --logger "trx;LogFileName=tests-x64.trx"
+
+      - name: Test (x86)
+        run: dotnet test ReClass.NET_Tests\ReClass.NET_Tests.csproj -c Release -p:Platform=x86 -nologo --logger "trx;LogFileName=tests-x86.trx"
+
+      - name: Assemble release layout
+        shell: pwsh
+        run: |
+          $out = "dist\ReClass.NET-ByteOffSec"
+          foreach ($p in "x86", "x64") {
+            New-Item -ItemType Directory -Force "$out\$p\Plugins" | Out-Null
+            Copy-Item "bin\Release\$p\*" "$out\$p\" -Recurse -Force
+            Copy-Item "Dependencies\$p\*" "$out\$p\" -Force
+            if (-not (Test-Path "$out\$p\NativeCore.dll")) { throw "NativeCore.dll missing for $p" }
+          }
+          Copy-Item "bin\Release\ReClass.NET_Launcher.exe" $out\
+          Copy-Item "bin\Release\ReClass.NET_Launcher.exe.config" $out\ -ErrorAction SilentlyContinue
+          Copy-Item LICENSE, README.md $out\
+          Get-ChildItem $out -Recurse -Include *.pdb, *.xml | Where-Object { $_.Name -ne 'ReClass.NET.exe.config' } | Remove-Item -Force
+          Get-ChildItem $out -Recurse | Select-Object -ExpandProperty FullName
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ReClass.NET-ByteOffSec-windows
+          path: ReClass.NET/dist/ReClass.NET-ByteOffSec
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-windows
+          path: ReClass.NET/ReClass.NET_Tests/TestResults/*.trx
+          if-no-files-found: ignore
+
+      - name: Zip for release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: Compress-Archive -Path dist\ReClass.NET-ByteOffSec -DestinationPath "dist\ReClass.NET-ByteOffSec-${{ github.ref_name }}-windows.zip"
+
+      - name: Publish GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ReClass.NET/dist/*.zip
+          generate_release_notes: true
+
+  linux:
+    name: Linux (managed build + NativeCore.so + tests under Mono)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Install Mono
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends mono-complete
+
+      - name: Build NativeCore.so (x64)
+        run: make -C NativeCore/Unix before_release out_release64
+
+      - name: Build managed projects
+        run: |
+          dotnet build ReClass.NET/ReClass.NET.csproj -c Release -p:Platform=x64 -nologo
+          dotnet build ReClass.NET/ReClass.NET.csproj -c Release -p:Platform=x86 -nologo
+          dotnet build ReClass.NET_Launcher/ReClass.NET_Launcher.csproj -c Release -nologo
+          dotnet build ReClass.NET_Tests/ReClass.NET_Tests.csproj -c Release -p:Platform=x64 -nologo
+
+      - name: Run tests under Mono
+        run: |
+          curl -sSL -o xunit.runner.console.nupkg https://api.nuget.org/v3-flatcontainer/xunit.runner.console/2.9.2/xunit.runner.console.2.9.2.nupkg
+          unzip -q -o xunit.runner.console.nupkg -d xunit-console
+          mono xunit-console/tools/net472/xunit.console.exe bin/Tests/Release/x64/ReClass.NET_Tests.dll -nologo -noshadow -xml test-results-linux.xml
+
+      - name: Assemble Linux x64 layout
+        run: |
+          mkdir -p dist/ReClass.NET-ByteOffSec-linux-x64/Plugins
+          cp -r bin/Release/x64/* dist/ReClass.NET-ByteOffSec-linux-x64/
+          cp NativeCore/Unix/build/release/x64/NativeCore.so dist/ReClass.NET-ByteOffSec-linux-x64/
+          cp LICENSE README.md dist/ReClass.NET-ByteOffSec-linux-x64/
+          rm -f dist/ReClass.NET-ByteOffSec-linux-x64/*.pdb
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ReClass.NET-ByteOffSec-linux-x64
+          path: ReClass.NET/dist/ReClass.NET-ByteOffSec-linux-x64
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-linux
+          path: ReClass.NET/test-results-linux.xml
+          if-no-files-found: ignore

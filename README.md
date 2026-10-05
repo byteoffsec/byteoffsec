@@ -46,6 +46,16 @@ I'm a penetration tester who enjoys solving CTF challenges and learning about ne
 
 
 
+### Projects
+
+<div align="center">
+
+**[ReClass.NET - ByteOffSec Edition](ReClass.NET/)** - a modernized custom build of the structure reverse engineering tool: dark mode, flat UI, offset-safe node editing, cross-platform `dotnet` build and CI.
+
+</div>
+
+---
+
 ### Connect with Me
 
 <div align="center">

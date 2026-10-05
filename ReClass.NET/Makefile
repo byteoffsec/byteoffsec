@@ -1,77 +1,47 @@
-.PHONY: all clean debug clean_debug release clean_release update docker_all docker_debug docker_release podman_all podman_debug podman_release dist
+# ReClass.NET ByteOffSec Edition
+#
+# The managed projects are SDK-style and build with the .NET SDK (8.0+) on any OS.
+# The native core needs MSVC on Windows (NativeCore/Windows/NativeCore.vcxproj, built by the
+# Visual Studio solution or the CI workflow) and g++ on Linux (NativeCore/Unix/Makefile).
+# Running the result on Linux additionally needs Mono (mono-complete) and libgdiplus.
 
-all: debug release dist
+.PHONY: all debug release native native-clean test dist clean
 
-clean: clean_debug clean_release
+CONFIGURATION ?= Release
+DOTNET ?= dotnet
+MONO ?= mono
+XUNIT_CONSOLE ?= xunit-console/tools/net472/xunit.console.exe
+
+all: release
 
 debug:
-	cd ReClass.NET_Launcher && make debug
-	cd ReClass.NET && make debug
-	cd NativeCore/Unix && make debug
-
-clean_debug:
-	cd ReClass.NET_Launcher && make clean_debug
-	cd ReClass.NET && make clean_debug
-	cd NativeCore/Unix && make clean_debug
-	rm -rf build/Debug
+	$(MAKE) release CONFIGURATION=Debug
 
 release:
-	cd ReClass.NET_Launcher && make release
-	cd ReClass.NET && make release
-	cd NativeCore/Unix && make release
+	$(DOTNET) build ReClass.NET/ReClass.NET.csproj -c $(CONFIGURATION) -p:Platform=x86 -nologo
+	$(DOTNET) build ReClass.NET/ReClass.NET.csproj -c $(CONFIGURATION) -p:Platform=x64 -nologo
+	$(DOTNET) build ReClass.NET_Launcher/ReClass.NET_Launcher.csproj -c $(CONFIGURATION) -nologo
 
-clean_release:
-	cd ReClass.NET_Launcher && make clean_release
-	cd ReClass.NET && make clean_release
-	cd NativeCore/Unix && make clean_release
-	rm -rf build/Release
+native:
+	$(MAKE) -C NativeCore/Unix before_release out_release64
 
-update:
-	cd ReClass.NET && make update
+native-clean:
+	$(MAKE) -C NativeCore/Unix clean
 
-docker_all:
-	make docker_debug
-	make docker_release
-	make dist
+# Builds the test project and runs it. `dotnet test` cannot host .NET Framework tests on Linux,
+# so the xunit console runner is executed under Mono instead.
+test:
+	$(DOTNET) build ReClass.NET_Tests/ReClass.NET_Tests.csproj -c $(CONFIGURATION) -p:Platform=x64 -nologo
+	test -f $(XUNIT_CONSOLE) || ( \
+		curl -sSL -o xunit.runner.console.nupkg https://api.nuget.org/v3-flatcontainer/xunit.runner.console/2.9.2/xunit.runner.console.2.9.2.nupkg && \
+		unzip -q -o xunit.runner.console.nupkg -d xunit-console && rm -f xunit.runner.console.nupkg )
+	$(MONO) $(XUNIT_CONSOLE) bin/Tests/$(CONFIGURATION)/x64/ReClass.NET_Tests.dll -nologo -noshadow
 
-docker_debug:
-	cd ReClass.NET_Launcher && make docker_debug
-	cd ReClass.NET && make docker_debug
-	docker container run --rm -v ${PWD}:/build:z -w /build -u $(shell id -u ${USER}):$(shell id -g ${USER}) gcc_multilib:latest bash -c "cd NativeCore/Unix && make debug"
+# Assembles a runnable Linux x64 tree in build/.
+dist: release native
+	mkdir -p build/$(CONFIGURATION)/x64/Plugins
+	cp -r bin/$(CONFIGURATION)/x64/* build/$(CONFIGURATION)/x64/
+	cp NativeCore/Unix/build/release/x64/NativeCore.so build/$(CONFIGURATION)/x64/
 
-docker_release:
-	cd ReClass.NET_Launcher && make docker_release
-	cd ReClass.NET && make docker_release
-	docker container run --rm -v ${PWD}:/build:z -w /build -u $(shell id -u ${USER}):$(shell id -g ${USER}) gcc_multilib:latest bash -c "cd NativeCore/Unix && make release"
-
-podman_all:
-	make podman_debug
-	make podman_release
-	make dist
-
-podman_debug:
-	cd ReClass.NET_Launcher && make podman_debug
-	cd ReClass.NET && make podman_debug
-	podman container run --rm -v ${PWD}:/build:z -w /build gcc_multilib:latest bash -c "cd NativeCore/Unix && make debug"
-
-podman_release:
-	cd ReClass.NET_Launcher && make podman_release
-	cd ReClass.NET && make podman_release
-	podman container run --rm -v ${PWD}:/build:z -w /build gcc_multilib:latest bash -c "cd NativeCore/Unix && make release"
-
-dist:
-	test -d build || mkdir -p build
-	cp -r ReClass.NET/bin/* build/
-	cp -r ReClass.NET_Launcher/bin/* build/
-	cp NativeCore/Unix/build/debug/x86/NativeCore.so build/Debug/x86
-	cp NativeCore/Unix/build/debug/x64/NativeCore.so build/Debug/x64
-	cp NativeCore/Unix/build/release/x86/NativeCore.so build/Release/x86
-	cp NativeCore/Unix/build/release/x64/NativeCore.so build/Release/x64
-	test -d build/Debug/x86/Plugins || mkdir build/Debug/x86/Plugins
-	test -d build/Debug/x64/Plugins || mkdir build/Debug/x64/Plugins
-	test -d build/Release/x86/Plugins || mkdir build/Release/x86/Plugins
-	test -d build/Release/x64/Plugins || mkdir build/Release/x64/Plugins
-	test -d build/Debug/x86 && cp -r Dependencies/x86/* build/Debug/x86
-	test -d build/Debug/x64 && cp -r Dependencies/x64/* build/Debug/x64
-	test -d build/Release/x86 && cp -r Dependencies/x86/* build/Release/x86
-	test -d build/Release/x64 && cp -r Dependencies/x64/* build/Release/x64
+clean: native-clean
+	rm -rf bin obj build ReClass.NET/obj ReClass.NET_Launcher/obj ReClass.NET_Tests/obj xunit-console

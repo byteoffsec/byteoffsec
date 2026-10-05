@@ -25,7 +25,6 @@
     <Compile Remove="Nodes\FunctionNode.Tokenizer.cs" />
     <EmbeddedResource Remove="Forms\ProcessMemoryViewForm.resx" />
     <None Remove="Resources\**" />
-    <None Remove="Makefile" />
   </ItemGroup>
 
   <ItemGroup>

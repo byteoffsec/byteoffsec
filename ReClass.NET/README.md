@@ -1,138 +1,106 @@
-# ReClass.NET
-This is a port of ReClass to the .NET platform with lots of additional features.
+# ReClass.NET - ByteOffSec Edition
 
-![](https://abload.de/img/main4hsbj.jpg)
+[![Build](https://github.com/byteoffsec/byteoffsec/actions/workflows/build.yml/badge.svg)](https://github.com/byteoffsec/byteoffsec/actions/workflows/build.yml)
 
-## Features
-- Support for x86 / x64
-- File import from ReClass 2007-2016 and ReClass QT
-- Memory Nodes
-  - Arrays and Pointers to every other node types
-  - Hex 8 / 16 / 32 / 64
-  - Int 8 / 16 / 32 / 64
-  - UInt 8 / 16 / 32 / 64
-  - Bool
-  - Bits ![](https://abload.de/img/bitsnhlql.jpg)
-  - Enumerations
-  - Float / Double
-  - Vector 2 / 3 / 4
-  - Matrix 3x3 / 3x4 / 4x4
-  - UTF8 / UTF16 / UTF32 Text and pointer to text
-  - Virtual Tables
-  - Function
-  - Function Pointer
-  - Unions
-- Automatic Node Dissection
-- Highlight changed memory
-- Pointer Preview
-- Copy / Paste Support across ReClass.NET instances
-- Display types from Debug Symbols (*.pdb)
-- Display Runtime Type Informations (RTTI)
-- Control the remote process: start / stop / kill
-- Process Selection Dialog with filtering
-- Memory Viewer
-- Memory Scanner
-  - Import files from Cheat Engine and CrySearch
-  - Scan for values correlated to your input
-- Class address calculator
-- Code Generator (C++ / C#)
-- Module / Section Dumper
-- Linux Support (tested on Ubuntu 18.04)
-- Debugger with "Find out what writes/accesses this address" support
-- Plugin Support
-  - Plugins can be written in different languages (example: C++, C++/CLI, C#)
-  - Plugins can provide custom methods to access an other process (example: use a driver)
-  - Plugins can interact with the ReClass.NET windows
-  - Plugins can provide node infos which will be displayed (example: class informations for Frostbite games)
-  - Plugins can implement custom nodes with load/save and code generation support
+A maintained custom build of [ReClass.NET](https://github.com/ReClassNET/ReClass.NET), the structure
+reverse engineering tool for Windows (x86 / x64) and Linux, with a modern dark UI and fixes for the
+long-standing node editing problems of the original.
 
-## Plugins
-- [Sample Plugins](https://github.com/ReClassNET/ReClass.NET-SamplePlugin)
-- [Frostbite Plugin](https://github.com/ReClassNET/ReClass.NET-FrostbitePlugin)
-- [MemoryPipe Plugin](https://github.com/ReClassNET/ReClass.NET-MemoryPipePlugin)
-- [LoadBinary Plugin](https://github.com/ReClassNET/ReClass.NET-LoadBinaryPlugin)
-- [Handle Abuser Plugin](https://github.com/ReClassNET/ReClass.NET-HandleAbuser)
-- Unreal Plugin (not available anymore) (by [DrP3pp3r](https://github.com/DrP3pp3r))
-- [DriverReader](https://github.com/niemand-sec/ReClass.NET-DriverReader) (by [Niemand](https://github.com/niemand-sec))
+> Based on upstream ReClass.NET master (`a02fcb9`, which is v1.2 plus later fixes) by KN4CK3R,
+> MIT licensed. See [UPSTREAM.md](UPSTREAM.md) for how the fork tracks upstream.
 
-To install a plugin just copy it in the "Plugins" folder.
-If you want to develop your own plugin just learn from the code of the [Sample Plugins](https://github.com/ReClassNET/ReClass.NET-SamplePlugin) and [Frostbite Plugin](https://github.com/ReClassNET/ReClass.NET-FrostbitePlugin) repositories. If you have developed a nice plugin, leave me a message and I will add it to the list above.
+## What is different
 
-## Installation
-Just download the [latest version](https://github.com/ReClassNET/ReClass.NET/releases) and start the x86 / x64 version or let the launcher decide.
+### Node editing no longer breaks the offsets below the edited node
 
-## Tips
-- Lots of elements have a context menu. Just right-click it and see what you can do there.
-- The node window can be controlled with the keyboard too. Arrow keys can select other keys, combined with the shift key the nodes get selected. The menu key opens the context menu which itself can be controlled with the keyboard.
-- The memory address field of a class can contain a real formula not just a fixed address.  
-  
-  **\<Program.exe> + 0x123** will use the base address of Program.exe and add 0x123 to it.  
-  **[0x4012ABDE]** will read the integer (4 byte on x86 / 8 byte on x64) from the address 0x4012ABDE and use this value as class address.  
-  **[\<Program.exe> + 0xDE] - AB** will use the base address of Program.exe, add 0xDE to it, read the value from this address and finally sub 0xAB from it.  
-  **[\<Program.exe> + offset + [\<Program.exe> + offset2]]** Nested operations are supported too.  
-  
-  Valid operations are read ([..]), add (+), sub (-), mul (*) and div (/). Please note that all operations are integer calculations.
+In the original, changing a node to a *bigger* type (Hex32 to Vector3, Hex16 to Int32, Hex8 to Int16,
+Hex32 to Int64 / Pointer / class instance, ...) pushed every node below it down by the size difference,
+so all the fields you had already named further down a long class pointed to the wrong offsets, and
+since the project file only stores the node list, the damage was saved with the project
+(upstream issues [#88](https://github.com/ReClassNET/ReClass.NET/issues/88) and
+[#196](https://github.com/ReClassNET/ReClass.NET/issues/196)). The same happened when editing a text
+length, an array count, or when a referenced class changed size.
 
-## Compiling
-If you want to compile ReClass.NET just fork the repository and open the ReClass.NET.sln file with Visual Studio 2019.
-Compile the project and copy the dependencies to the output folder.
+In this edition a class keeps the offsets of all following nodes stable whenever a node changes size:
 
-To compile the linux native core library, you need WSL [installed and configured](https://learn.microsoft.com/en-us/cpp/build/walkthrough-build-debug-wsl2). If you do not need linux support, simply unload the project in the Solution Explorer. If you want to build cross-platform (x86/x64) you have to install `g++-multilib` too.
+- a node that grows consumes the bytes of the nodes after it (a partially covered node is replaced by
+  padding for its remainder, so the next untouched node keeps its exact offset),
+- a node that shrinks is padded with hex bytes,
+- if a growth would swallow a field you already defined (anything that is not plain hex padding), the
+  type change asks for confirmation first,
+- selecting several contiguous nodes and picking a type refills exactly that byte range with as many
+  instances of the type as fit,
+- inserting bytes, adding bytes and deleting nodes behave as before (those are intentional layout changes),
+- loading a project reproduces the saved layout byte for byte.
 
-If you use the `Makefile` with `docker` or `podman` you have to build the needed image `gcc_multilib` from the following `Dockerfile` (`docker build -t gcc_multi .`):
+The legacy behaviour can be restored in *Settings > General* ("Keep offsets of following nodes when a
+node changes size").
 
+### Dark mode and a modern flat UI
+
+- Light and Dark themes (Dark is the default), switchable live in *Settings > General > Appearance*.
+- Every window, menu, tool bar, status bar, grid, tree and dialog follows the theme; on Windows 10/11
+  the title bar and scroll bars switch too.
+- Matching light / dark colour presets for the memory view (type, name, value, address, comment, ...)
+  with one-click reset buttons in *Settings > Colors*. Your own colour customisations are never
+  overwritten automatically.
+- Flat tool bars, menus and buttons without gradients and 3D bevels.
+
+### Modern build
+
+- SDK-style projects: `dotnet build` works on Windows, Linux and macOS for the managed code, and the
+  solution still opens in Visual Studio 2022.
+- GitHub Actions builds the native core, both platforms, the launcher, runs the test suite on Windows
+  and Linux (Mono) and publishes ready-to-run artifacts; tags starting with `v` create a release.
+- The node layout logic is covered by unit tests.
+
+Everything else (nodes, plugins, memory scanner, debugger, code generator, project format, plugin API)
+is unchanged and compatible with the original: existing `.rcnet` projects, plugins built against
+ReClass.NET 1.2 and the `settings.xml` of the original build keep working.
+
+## Download / install
+
+1. Take the `ReClass.NET-ByteOffSec-windows` artifact of the latest
+   [build](https://github.com/byteoffsec/byteoffsec/actions/workflows/build.yml) (or the zip of a
+   release).
+2. Extract it anywhere (for example next to your existing `ReClass.NET-v1.2` folder) and start
+   `ReClass.NET_Launcher.exe`, or `x64\ReClass.NET.exe` / `x86\ReClass.NET.exe` directly.
+3. Plugins go into the `x64\Plugins` / `x86\Plugins` folder as before.
+
+## Building
+
+### Windows
+
+- Visual Studio 2022 with the ".NET desktop development" and "Desktop development with C++" workloads:
+  open `ReClass.NET.sln`, pick `x64` or `x86`, build.
+- Command line:
+
+  ```powershell
+  msbuild NativeCore\Windows\NativeCore.vcxproj /p:Configuration=Release /p:Platform=x64 "/p:SolutionDir=$PWD\"
+  dotnet build ReClass.NET\ReClass.NET.csproj -c Release -p:Platform=x64
+  dotnet build ReClass.NET_Launcher\ReClass.NET_Launcher.csproj -c Release
+  dotnet test  ReClass.NET_Tests\ReClass.NET_Tests.csproj -c Release -p:Platform=x64
+  ```
+
+  Output: `bin\Release\x64\` (plus `bin\Release\ReClass.NET_Launcher.exe`). Copy `Dependencies\x64\*`
+  next to the executable for symbol support.
+
+### Linux
+
+```bash
+sudo apt install dotnet-sdk-8.0 mono-complete libgdiplus g++ make
+make            # managed projects, x86 + x64 + launcher
+make native     # NativeCore.so (x64)
+make test       # unit tests (xunit console runner under Mono)
+make dist       # runnable tree in build/Release/x64
+mono build/Release/x64/ReClass.NET.exe
 ```
-FROM ubuntu:latest
 
-RUN apt-get update \
- && apt-get install --assume-yes --no-install-recommends --quiet \
-        make \
-        g++ \
-        g++-multilib \
- && apt-get clean all
-```
+## Credits
 
-## Videos
+- [KN4CK3R](https://github.com/KN4CK3R) and the ReClass.NET contributors for the original tool.
+- The theme and node layout work of this edition by [ByteOffSec](https://github.com/byteoffsec).
 
-[Youtube Playlist](https://www.youtube.com/playlist?list=PLO246BmtoITanq3ygMCL8_w0eov4D8hjk)
+## License
 
-## Screenshots
-Process Selection  
-![](https://abload.de/img/processgya2k.jpg)
-
-Memory Viewer  
-![](https://abload.de/img/memoryviewerb4y1s.jpg)
-
-Memory Scanner  
-![](https://abload.de/img/scannerytub1.jpg)
-
-Pointer Preview  
-![](https://abload.de/img/memorypreview2gsfp.jpg)
-
-Code Generator  
-![](https://abload.de/img/codegeneratorqdat2.jpg)
-![](https://abload.de/img/codegenerator24qzce.jpg)
-
-Plugins  
-![](https://abload.de/img/plugin1mda4r.jpg)
-![](https://abload.de/img/plugin25dxk1.jpg)
-
-Settings  
-![](https://abload.de/img/settings8sz4b.jpg)
-
-## Authors / Special Thanks
-- [KN4CK3R](https://github.com/KN4CK3R)
-- DrUnKeN ChEeTaH
-- P47R!CK
-- DogMatt
-- [ajkhoury](https://github.com/ajkhoury)
-- [IChooseYou](https://github.com/IChooseYou)
-- [stevemk14ebr](https://github.com/stevemk14ebr)
-- [Timboy67678](https://github.com/Timboy67678)
-- [DarthTon](https://github.com/DarthTon)
-- [ReUnioN](https://github.com/ReUnioN)
-- leveln
-- [buddyfavors](https://github.com/buddyfavors)
-- [DrP3pp3r](https://github.com/DrP3pp3r)
-- [ko1N](https://github.com/ko1N)
-- [Niemand](https://github.com/niemand-sec) (see his talk at [BlackHat Europe 2019 (London) "Unveiling the underground world of Anti-Cheats"](https://www.blackhat.com/eu-19/briefings/schedule/index.html#unveiling-the-underground-world-of-anti-cheats-17358))
+MIT, same as upstream. See [LICENSE](LICENSE).
