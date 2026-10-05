@@ -273,6 +273,21 @@ namespace ReClassNET.Nodes
 				}
 
 				var currentSize = node.MemorySize;
+
+				if (!node.ParticipatesInSizeCompensation)
+				{
+					// The node turned into a runtime sized one (an array whose inner node became a function).
+					// From now on it follows the legacy rule: a shrink is padded once, a growth shifts the successors.
+					if (currentSize < layoutSize)
+					{
+						InsertBytesCore(index + 1, layoutSize - currentSize, ref createdNodes);
+					}
+
+					node.LayoutSize = -1;
+
+					continue;
+				}
+
 				if (currentSize == layoutSize)
 				{
 					continue;

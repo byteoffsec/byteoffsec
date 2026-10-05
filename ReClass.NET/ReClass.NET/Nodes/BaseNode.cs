@@ -43,11 +43,27 @@ namespace ReClassNET.Nodes
 		public bool IsWrapped => ParentNode is BaseWrapperNode;
 
 		/// <summary>
-		/// Gets a value indicating whether this node is still part of the node tree. A node which was removed, replaced or
-		/// consumed by a resized node loses its parent (see <see cref="BaseContainerNode.RemoveNode"/>); stale references in
-		/// selections or hot spots use this to detect it. Classes are roots and always count as attached.
+		/// Gets a value indicating whether a class is reachable through the parent chain of this node. A node which was removed,
+		/// replaced or consumed by a resized node loses its parent (see <see cref="BaseContainerNode.RemoveNode"/>), which also
+		/// detaches everything below it (union members, virtual methods, wrapped nodes); stale references in selections or
+		/// hot spots use this to detect it. Classes are roots and always count as attached. The former inner node of a wrapper
+		/// (see <see cref="BaseWrapperNode.ChangeInnerNode"/>) is not covered, such nodes are never selectable.
 		/// </summary>
-		public bool IsAttached => this is ClassNode || ParentNode != null;
+		public bool IsAttached
+		{
+			get
+			{
+				for (var node = this; node != null; node = node.ParentNode)
+				{
+					if (node is ClassNode)
+					{
+						return true;
+					}
+				}
+
+				return false;
+			}
+		}
 
 		/// <summary>Gets or sets a value indicating whether this node is hidden.</summary>
 		public bool IsHidden { get; set; }

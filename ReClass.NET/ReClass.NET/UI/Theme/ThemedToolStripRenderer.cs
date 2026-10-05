@@ -407,14 +407,7 @@ namespace ReClassNET.UI.Theme
 				return;
 			}
 
-			// The stock renderer nudges the image of a pressed button by one pixel, the re-created arguments lose that flag.
-			var imageRectangle = e.ImageRectangle;
-			if (e.Item is ToolStripButton button && button.Pressed)
-			{
-				imageRectangle.Offset(1, 1);
-			}
-
-			base.OnRenderItemImage(new ToolStripItemImageRenderEventArgs(e.Graphics, e.Item, variant, imageRectangle));
+			base.OnRenderItemImage(new ToolStripItemImageRenderEventArgs(e.Graphics, e.Item, variant, e.ImageRectangle));
 		}
 
 		protected override void OnRenderItemCheck(ToolStripItemImageRenderEventArgs e)

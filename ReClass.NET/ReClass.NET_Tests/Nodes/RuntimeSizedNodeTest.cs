@@ -158,16 +158,78 @@ namespace ReClass.NET_Tests.Nodes
 			Check.That(classNode.Nodes[1]).IsSameReferenceAs(health);
 			Check.That(classNode.Nodes[2]).IsSameReferenceAs(ammo);
 			Check.That(classNode.MemorySize).IsEqualTo(308);
+			Check.That(a.LayoutSize).IsEqualTo(-1);
+			Check.That(classNode.IsLayoutComplete).IsFalse();
 
-			// A pointer to a runtime sized node has a fixed size and keeps compensating.
+			// Shrinking back doesn't pad either.
+			f.DiscoverSize(8);
+
+			CheckLayout(classNode, (typeof(ArrayNode), 0), (typeof(Int32Node), 8), (typeof(Int32Node), 12));
+
+			// Arrays of arrays inherit it as well.
+			var inner = new RuntimeSizedNode(8).Named("inner");
+			var nested = ArrayOf(ArrayOf(inner, 1), 1).Named("nested");
+			var tail = new Int32Node().Named("tail");
+			var nestedClass = CreateClass(nested, tail);
+
+			inner.DiscoverSize(100);
+
+			CheckLayout(nestedClass, (typeof(ArrayNode), 0), (typeof(Int32Node), 100));
+			Check.That(nestedClass.Nodes[1]).IsSameReferenceAs(tail);
+			Check.That(nested.LayoutSize).IsEqualTo(-1);
+
+			// A pointer to a runtime sized node has a fixed size and is tracked like every other node.
 			var p = new PointerNode();
 			p.ChangeInnerNode(new RuntimeSizedNode(8));
-			var tail = new Int32Node().Named("tail");
-			var other = CreateClass(p, new Hex32Node(), new Hex32Node(), tail);
-			other.ReplaceChildNode(p, new Hex32Node());
+			var pointerClass = CreateClass(p, new Int32Node());
 
-			Check.That(other.Nodes[other.Nodes.Count - 1]).IsSameReferenceAs(tail);
-			Check.That(tail.Offset).IsEqualTo(IntPtr.Size + 8);
+			Check.That(p.LayoutSize).IsEqualTo(IntPtr.Size);
+			Check.That(pointerClass.IsLayoutComplete).IsTrue();
+		}
+
+		[Fact]
+		public void ArrayTurningIntoARuntimeSizedOneFollowsTheLegacyRule()
+		{
+			// Growth: [Int8[4] a][Int32 health][Int32 ammo], the inner node becomes a function with its 8 byte placeholder.
+			var a = ArrayOf(new Int8Node(), 4).Named("a");
+			var health = new Int32Node().Named("health");
+			var ammo = new Int32Node().Named("ammo");
+			var classNode = CreateClass(a, health, ammo);
+
+			a.ChangeInnerNode(new RuntimeSizedNode(8));
+
+			CheckLayout(classNode, (typeof(ArrayNode), 0), (typeof(Int32Node), 32), (typeof(Int32Node), 36));
+			Check.That(classNode.Nodes[1]).IsSameReferenceAs(health);
+			Check.That(classNode.Nodes[2]).IsSameReferenceAs(ammo);
+			Check.That(a.LayoutSize).IsEqualTo(-1);
+
+			// Shrink: [Int32[2] b][Int32 tail], the inner node becomes a 2 byte runtime sized node. The gap is padded once.
+			var b = ArrayOf(new Int32Node(), 2).Named("b");
+			var tail = new Int32Node().Named("tail");
+			var other = CreateClass(b, tail);
+
+			b.ChangeInnerNode(new RuntimeSizedNode(2));
+
+			CheckLayout(other, (typeof(ArrayNode), 0), (typeof(Hex32Node), 4), (typeof(Int32Node), 8));
+			Check.That(other.Nodes[2]).IsSameReferenceAs(tail);
+			Check.That(b.LayoutSize).IsEqualTo(-1);
+		}
+
+		[Fact]
+		public void ArrayLeavingTheRuntimeSizedStateShiftsItsSuccessors()
+		{
+			// The occupied size of a runtime sized array is unknown, so changing its inner node to a fixed type is a plain shift.
+			var f = new RuntimeSizedNode(8).Named("f");
+			var a = ArrayOf(f, 1).Named("a");
+			var health = new Int32Node().Named("health");
+			var classNode = CreateClass(a, health);
+
+			a.ChangeInnerNode(new Hex16Node());
+
+			CheckLayout(classNode, (typeof(ArrayNode), 0), (typeof(Int32Node), 2));
+			Check.That(classNode.Nodes[1]).IsSameReferenceAs(health);
+			Check.That(a.LayoutSize).IsEqualTo(2);
+			Check.That(classNode.IsLayoutComplete).IsTrue();
 		}
 
 		[Fact]

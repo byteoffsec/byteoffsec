@@ -50,6 +50,8 @@ In this edition a class keeps the offsets of all following nodes stable whenever
 - selecting several contiguous nodes and picking a type refills exactly that byte range with as many
   instances of the type as fit,
 - inserting bytes, adding bytes and deleting nodes behave as before (those are intentional layout changes),
+- nodes whose size the tool discovers at runtime (functions, arrays of functions and instances of classes that
+  contain them) keep the original behaviour and shift the nodes below them,
 - loading a project reproduces the saved layout byte for byte,
 - importing legacy `.reclass` / `.reclassqt` files keeps class instances and arrays of classes (the original
   dropped them because of an inverted cycle check).

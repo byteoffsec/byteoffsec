@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Linq;
@@ -238,7 +238,7 @@ namespace ReClassNET.DataExchange.ReClass
 				switch (node)
 				{
 					case VirtualMethodTableNode vtableNode:
-						element
+						vtableNode.AddNodes(element
 							.Elements("Function")
 							.Select(e => new VirtualMethodNode
 							{
@@ -246,7 +246,7 @@ namespace ReClassNET.DataExchange.ReClass
 								Comment = e.Attribute("Comment")?.Value ?? string.Empty,
 								IsHidden = e.Attribute("bHidden")?.Value.Equals("1") ?? false
 							})
-							.ForEach(vtableNode.AddNode);
+						);
 						break;
 					case BaseTextNode textNode:
 					{

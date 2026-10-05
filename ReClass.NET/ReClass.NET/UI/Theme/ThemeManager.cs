@@ -116,8 +116,9 @@ namespace ReClassNET.UI.Theme
 
 		/// <summary>
 		/// Excludes a control and all its children (including children added later) from theming. Useful for plugin
-		/// controls which paint themselves. Hooks installed by an earlier <see cref="Apply(Control)"/> are removed,
-		/// colors which were already applied are not reverted, so exclude controls before the form is shown.
+		/// controls which paint themselves. Hooks installed by an earlier <see cref="Apply(Control)"/> are removed and
+		/// the draw modes the theme switched are restored; colors and border styles which were already applied are not
+		/// reverted, so exclude controls before the form is shown.
 		/// </summary>
 		/// <param name="control">The control.</param>
 		public static void Exclude(Control control)
@@ -480,6 +481,7 @@ namespace ReClassNET.UI.Theme
 					if (ReleaseOwnerDraw(comboBox))
 					{
 						comboBox.DrawMode = DrawMode.Normal;
+						comboBox.FlatStyle = FlatStyle.Standard;
 					}
 					break;
 				case TreeView treeView:
@@ -539,6 +541,7 @@ namespace ReClassNET.UI.Theme
 		/// <summary>
 		/// Gives the drawing of a control claimed by <see cref="ClaimOwnerDraw"/> back to the stock implementation.
 		/// </summary>
+		/// <param name="control">The control.</param>
 		/// <returns>True if the control was owner drawn by the theme.</returns>
 		private static bool ReleaseOwnerDraw(Control control)
 		{

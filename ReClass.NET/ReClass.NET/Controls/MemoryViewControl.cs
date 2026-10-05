@@ -168,34 +168,21 @@ namespace ReClassNET.Controls
 		}
 
 		/// <summary>
-		/// Tests if the node is still part of a container. A node which was removed, replaced or consumed by a
-		/// resized node loses its parent (see <see cref="BaseContainerNode.RemoveNode"/>), the hot spots and the
-		/// selection may still reference it until the next repaint.
-		/// </summary>
-		/// <param name="node">The node to test.</param>
-		/// <returns>True if the node is a class or a child of its parent container, false otherwise.</returns>
-		private static bool IsAttached(BaseNode node)
-		{
-			// Detached nodes lose their parent, so this stays O(1) for the repaint timer and the key handling.
-			return node.IsAttached;
-		}
-
-		/// <summary>
-		/// Removes the nodes which are no longer attached (see <see cref="IsAttached"/>) from the selection.
+		/// Removes the nodes which are no longer attached (see <see cref="BaseNode.IsAttached"/>) from the selection.
 		/// Raises <see cref="SelectionChanged"/> if the selection changed.
 		/// </summary>
 		private void PruneSelection()
 		{
-			if (selectedNodes.RemoveAll(h => !IsAttached(h.Node)) == 0)
+			if (selectedNodes.RemoveAll(h => !h.Node.IsAttached) == 0)
 			{
 				return;
 			}
 
-			if (selectionAnchor != null && !IsAttached(selectionAnchor.Node))
+			if (selectionAnchor != null && !selectionAnchor.Node.IsAttached)
 			{
 				selectionAnchor = selectedNodes.FirstOrDefault();
 			}
-			if (selectionCaret != null && !IsAttached(selectionCaret.Node))
+			if (selectionCaret != null && !selectionCaret.Node.IsAttached)
 			{
 				selectionCaret = selectedNodes.LastOrDefault();
 			}
