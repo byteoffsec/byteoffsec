@@ -41,6 +41,8 @@ namespace ReClassNET.Forms
 			this.buildTimeValueLabel = new System.Windows.Forms.Label();
 			this.authorValueLabel = new System.Windows.Forms.Label();
 			this.homepageValueLabel = new System.Windows.Forms.LinkLabel();
+			this.upstreamLabel = new System.Windows.Forms.Label();
+			this.upstreamValueLabel = new System.Windows.Forms.LinkLabel();
 			this.licenseGroupBox = new System.Windows.Forms.GroupBox();
 			this.licenseTextBox = new System.Windows.Forms.TextBox();
 			((System.ComponentModel.ISupportInitialize)(this.bannerBox)).BeginInit();
@@ -60,7 +62,7 @@ namespace ReClassNET.Forms
 			// infoLabel
 			// 
 			this.infoLabel.AutoSize = true;
-			this.infoLabel.Location = new System.Drawing.Point(12, 140);
+			this.infoLabel.Location = new System.Drawing.Point(12, 159);
 			this.infoLabel.Name = "infoLabel";
 			this.infoLabel.Size = new System.Drawing.Size(333, 26);
 			this.infoLabel.TabIndex = 1;
@@ -141,10 +143,30 @@ namespace ReClassNET.Forms
 			this.homepageValueLabel.Text = "<>";
 			this.homepageValueLabel.LinkClicked += new System.Windows.Forms.LinkLabelLinkClickedEventHandler(this.homepageValueLabel_LinkClicked);
 			// 
+			// upstreamLabel
+			// 
+			this.upstreamLabel.AutoSize = true;
+			this.upstreamLabel.Location = new System.Drawing.Point(12, 136);
+			this.upstreamLabel.Name = "upstreamLabel";
+			this.upstreamLabel.Size = new System.Drawing.Size(55, 13);
+			this.upstreamLabel.TabIndex = 11;
+			this.upstreamLabel.Text = "Based on:";
+			// 
+			// upstreamValueLabel
+			// 
+			this.upstreamValueLabel.AutoSize = true;
+			this.upstreamValueLabel.Location = new System.Drawing.Point(84, 136);
+			this.upstreamValueLabel.Name = "upstreamValueLabel";
+			this.upstreamValueLabel.Size = new System.Drawing.Size(19, 13);
+			this.upstreamValueLabel.TabIndex = 12;
+			this.upstreamValueLabel.TabStop = true;
+			this.upstreamValueLabel.Text = "<>";
+			this.upstreamValueLabel.LinkClicked += new System.Windows.Forms.LinkLabelLinkClickedEventHandler(this.upstreamValueLabel_LinkClicked);
+			// 
 			// licenseGroupBox
 			// 
 			this.licenseGroupBox.Controls.Add(this.licenseTextBox);
-			this.licenseGroupBox.Location = new System.Drawing.Point(15, 178);
+			this.licenseGroupBox.Location = new System.Drawing.Point(15, 197);
 			this.licenseGroupBox.Name = "licenseGroupBox";
 			this.licenseGroupBox.Size = new System.Drawing.Size(382, 174);
 			this.licenseGroupBox.TabIndex = 10;
@@ -165,8 +187,10 @@ namespace ReClassNET.Forms
 			// 
 			this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
 			this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-			this.ClientSize = new System.Drawing.Size(409, 364);
+			this.ClientSize = new System.Drawing.Size(409, 383);
 			this.Controls.Add(this.licenseGroupBox);
+			this.Controls.Add(this.upstreamValueLabel);
+			this.Controls.Add(this.upstreamLabel);
 			this.Controls.Add(this.homepageValueLabel);
 			this.Controls.Add(this.authorValueLabel);
 			this.Controls.Add(this.buildTimeValueLabel);
@@ -203,6 +227,8 @@ namespace ReClassNET.Forms
 		private System.Windows.Forms.Label buildTimeValueLabel;
 		private System.Windows.Forms.Label authorValueLabel;
 		private System.Windows.Forms.LinkLabel homepageValueLabel;
+		private System.Windows.Forms.Label upstreamLabel;
+		private System.Windows.Forms.LinkLabel upstreamValueLabel;
 		private System.Windows.Forms.GroupBox licenseGroupBox;
 		private System.Windows.Forms.TextBox licenseTextBox;
 	}

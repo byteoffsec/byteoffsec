@@ -7,6 +7,7 @@ using ReClassNET.Controls;
 using ReClassNET.Extensions;
 using ReClassNET.Memory;
 using ReClassNET.UI;
+using ReClassNET.UI.Theme;
 using ReClassNET.Util;
 
 namespace ReClassNET.Nodes
@@ -14,10 +15,27 @@ namespace ReClassNET.Nodes
 	public abstract class BaseHexNode : BaseNode
 	{
 		private static readonly Random highlightRandom = new Random();
-		private static readonly Color[] highlightColors = {
+		private static readonly Color[] lightBackgroundHighlightColors = {
 			Color.Aqua, Color.Aquamarine, Color.Blue, Color.BlueViolet, Color.Chartreuse, Color.Crimson, Color.LawnGreen, Color.Magenta
 		};
-		private static Color GetRandomHighlightColor() => highlightColors[highlightRandom.Next(highlightColors.Length)];
+		private static readonly Color[] darkBackgroundHighlightColors = {
+			Color.Aqua, Color.Aquamarine, Color.DeepSkyBlue, Color.MediumOrchid, Color.Chartreuse, Color.Tomato, Color.LawnGreen, Color.Magenta
+		};
+
+		/// <summary>Gets the colors used to flash changed values on the given memory view background.</summary>
+		/// <param name="backgroundColor">The background color of the memory view.</param>
+		/// <returns>The highlight colors.</returns>
+		public static IReadOnlyList<Color> GetHighlightColors(Color backgroundColor)
+		{
+			return ThemePalette.IsDarkColor(backgroundColor) ? darkBackgroundHighlightColors : lightBackgroundHighlightColors;
+		}
+
+		private static Color GetRandomHighlightColor(Color backgroundColor)
+		{
+			var colors = GetHighlightColors(backgroundColor);
+
+			return colors[highlightRandom.Next(colors.Count)];
+		}
 
 		private static readonly TimeSpan hightlightDuration = TimeSpan.FromSeconds(1);
 
@@ -68,7 +86,7 @@ namespace ReClassNET.Nodes
 				{
 					if (until.Value >= context.CurrentTime)
 					{
-						color = GetRandomHighlightColor();
+						color = GetRandomHighlightColor(context.Settings.BackgroundColor);
 
 						if (context.Memory.HasChanged(Offset, MemorySize))
 						{
@@ -80,7 +98,7 @@ namespace ReClassNET.Nodes
 				{
 					highlightTimer.Add(address, context.CurrentTime.Add(hightlightDuration));
 
-					color = GetRandomHighlightColor();
+					color = GetRandomHighlightColor(context.Settings.BackgroundColor);
 				}
 			}
 

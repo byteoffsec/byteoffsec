@@ -107,14 +107,15 @@ namespace ReClassNET.Controls
 				var record = (MemoryRecord)resultDataGridView.Rows[e.RowIndex].DataBoundItem;
 				if (record.IsRelativeAddress)
 				{
-					e.CellStyle.ForeColor = ThemeManager.IsDark ? Color.FromArgb(0x4E, 0xC9, 0xB0) : Color.ForestGreen;
+					// The same color the memory view uses for addresses in the current theme.
+					e.CellStyle.ForeColor = NodeColorPresets.ForTheme(ThemeManager.Current).AddressColor;
 					e.FormattingApplied = true;
 				}
 			}
 			else if (e.ColumnIndex == 3) // Value
 			{
 				var record = (MemoryRecord)resultDataGridView.Rows[e.RowIndex].DataBoundItem;
-				e.CellStyle.ForeColor = record.HasChangedValue ? ThemeManager.Palette.Accent : ThemeManager.Palette.Text;
+				e.CellStyle.ForeColor = record.HasChangedValue ? ThemeManager.Palette.AttentionText : ThemeManager.Palette.Text;
 				e.FormattingApplied = true;
 			}
 		}

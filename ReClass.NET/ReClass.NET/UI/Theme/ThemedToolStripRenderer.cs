@@ -1,5 +1,7 @@
+using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Drawing.Imaging;
 using System.Windows.Forms;
 
 namespace ReClassNET.UI.Theme
@@ -360,16 +362,52 @@ namespace ReClassNET.UI.Theme
 
 		protected override void OnRenderItemText(ToolStripItemTextRenderEventArgs e)
 		{
-			e.TextColor = GetTextColor(e.Item);
+			if (UsesStockColor(e.Item, e.TextColor))
+			{
+				e.TextColor = GetTextColor(e.Item);
+			}
 
 			base.OnRenderItemText(e);
 		}
 
 		protected override void OnRenderArrow(ToolStripArrowRenderEventArgs e)
 		{
-			e.ArrowColor = GetTextColor(e.Item);
+			if (UsesStockColor(e.Item, e.ArrowColor))
+			{
+				e.ArrowColor = GetTextColor(e.Item);
+			}
 
 			base.OnRenderArrow(e);
+		}
+
+		protected override void OnRenderItemImage(ToolStripItemImageRenderEventArgs e)
+		{
+			var image = e.Image;
+			if (image == null || !P.IsDark || e.ImageRectangle.Width <= 0 || e.ImageRectangle.Height <= 0)
+			{
+				base.OnRenderItemImage(e);
+
+				return;
+			}
+
+			// Dark monochrome glyphs (the node type icons) are invisible on the dark tool bar, draw their light variant.
+			var variant = ThemedGlyphs.ForDarkSurface(image);
+			if (ReferenceEquals(variant, image))
+			{
+				base.OnRenderItemImage(e);
+
+				return;
+			}
+
+			if (e.Item != null && !e.Item.Enabled)
+			{
+				// The stock disabled effect brightens the image further, a plain fade reads as disabled on dark surfaces.
+				DrawFadedImage(e.Graphics, variant, e.ImageRectangle, e.Item.ImageScaling);
+
+				return;
+			}
+
+			base.OnRenderItemImage(new ToolStripItemImageRenderEventArgs(e.Graphics, e.Item, variant, e.ImageRectangle));
 		}
 
 		protected override void OnRenderItemCheck(ToolStripItemImageRenderEventArgs e)
@@ -429,6 +467,44 @@ namespace ReClassNET.UI.Theme
 		public static Color GetTextColor(ToolStripItem item)
 		{
 			return item != null && item.Enabled ? P.Text : P.DisabledText;
+		}
+
+		/// <summary>
+		/// Checks if the color is one of the stock colors (a system color or the fore color of the owning strip),
+		/// i.e. the item has no explicit color of its own which must be kept.
+		/// </summary>
+		/// <param name="item">The item.</param>
+		/// <param name="color">The color the item is about to be drawn with.</param>
+		/// <returns>True if the renderer should substitute the palette color.</returns>
+		private static bool UsesStockColor(ToolStripItem item, Color color)
+		{
+			if (item == null || !item.Enabled)
+			{
+				return true;
+			}
+
+			if (color.IsEmpty || color.IsSystemColor || color.ToArgb() == Control.DefaultForeColor.ToArgb())
+			{
+				return true;
+			}
+
+			var owner = item.Owner;
+
+			return owner != null && color.ToArgb() == owner.ForeColor.ToArgb();
+		}
+
+		private static void DrawFadedImage(Graphics g, Image image, Rectangle bounds, ToolStripItemImageScaling scaling)
+		{
+			using var attributes = new ImageAttributes();
+
+			attributes.SetColorMatrix(new ColorMatrix { Matrix33 = 0.4f });
+
+			var source = scaling == ToolStripItemImageScaling.None
+				? new Rectangle(0, 0, Math.Min(image.Width, bounds.Width), Math.Min(image.Height, bounds.Height))
+				: new Rectangle(0, 0, image.Width, image.Height);
+			var destination = scaling == ToolStripItemImageScaling.None ? new Rectangle(bounds.Location, source.Size) : bounds;
+
+			g.DrawImage(image, destination, source.X, source.Y, source.Width, source.Height, GraphicsUnit.Pixel, attributes);
 		}
 
 		private static void FillItem(Graphics g, Rectangle bounds, Color fill, Color border)

@@ -5,6 +5,7 @@ using System.Drawing;
 using System.Linq;
 using System.Windows.Forms;
 using ReClassNET.Controls;
+using ReClassNET.Native;
 
 namespace ReClassNET.UI.Theme
 {
@@ -17,10 +18,14 @@ namespace ReClassNET.UI.Theme
 	{
 		private static readonly HashSet<Form> attachedForms = new HashSet<Form>();
 		private static readonly HashSet<Control> excludedControls = new HashSet<Control>();
+		private static readonly HashSet<Control> ownerDrawnByTheme = new HashSet<Control>();
 
 		private static readonly ControlEventHandler controlAddedHandler = OnControlAdded;
 		private static readonly EventHandler handleCreatedHandler = OnHandleCreated;
+		private static readonly EventHandler excludedDisposedHandler = OnExcludedDisposed;
+		private static readonly EventHandler ownerDrawnDisposedHandler = OnOwnerDrawnDisposed;
 		private static readonly ToolStripItemEventHandler itemAddedHandler = OnToolStripItemAdded;
+		private static readonly EventHandler dropDownOpeningHandler = OnDropDownOpening;
 		private static readonly PaintEventHandler groupBoxPaintHandler = OnGroupBoxPaint;
 		private static readonly PaintEventHandler buttonPaintHandler = OnButtonPaint;
 		private static readonly PaintEventHandler checkBoxPaintHandler = OnCheckBoxPaint;
@@ -28,6 +33,7 @@ namespace ReClassNET.UI.Theme
 		private static readonly PaintEventHandler labelPaintHandler = OnLabelPaint;
 		private static readonly DrawItemEventHandler tabControlDrawItemHandler = OnTabControlDrawItem;
 		private static readonly DrawItemEventHandler listBoxDrawItemHandler = OnListBoxDrawItem;
+		private static readonly DrawItemEventHandler comboBoxDrawItemHandler = OnComboBoxDrawItem;
 		private static readonly DrawTreeNodeEventHandler treeViewDrawNodeHandler = OnTreeViewDrawNode;
 		private static readonly DrawToolTipEventHandler toolTipDrawHandler = OnToolTipDraw;
 
@@ -108,7 +114,11 @@ namespace ReClassNET.UI.Theme
 			}
 		}
 
-		/// <summary>Excludes a control (and its children) from theming. Useful for plugin controls which paint themselves.</summary>
+		/// <summary>
+		/// Excludes a control and all its children (including children added later) from theming. Useful for plugin
+		/// controls which paint themselves. Hooks installed by an earlier <see cref="Apply(Control)"/> are removed,
+		/// colors which were already applied are not reverted, so exclude controls before the form is shown.
+		/// </summary>
 		/// <param name="control">The control.</param>
 		public static void Exclude(Control control)
 		{
@@ -116,8 +126,45 @@ namespace ReClassNET.UI.Theme
 
 			if (excludedControls.Add(control))
 			{
-				control.Disposed += (sender, e) => excludedControls.Remove((Control)sender);
+				control.Disposed += excludedDisposedHandler;
 			}
+
+			Unhook(control);
+		}
+
+		/// <summary>Removes an exclusion made with <see cref="Exclude"/> and themes the control again.</summary>
+		/// <param name="control">The control.</param>
+		public static void Include(Control control)
+		{
+			Contract.Requires(control != null);
+
+			if (excludedControls.Remove(control))
+			{
+				control.Disposed -= excludedDisposedHandler;
+			}
+
+			Apply(control);
+		}
+
+		/// <summary>Checks if the control or one of its ancestors was excluded from theming.</summary>
+		/// <param name="control">The control.</param>
+		/// <returns>True if the control is excluded.</returns>
+		public static bool IsExcluded(Control control)
+		{
+			if (excludedControls.Count == 0)
+			{
+				return false;
+			}
+
+			for (var current = control; current != null; current = current.Parent)
+			{
+				if (excludedControls.Contains(current))
+				{
+					return true;
+				}
+			}
+
+			return false;
 		}
 
 		/// <summary>Applies the current theme to the control and all its children.</summary>
@@ -150,7 +197,7 @@ namespace ReClassNET.UI.Theme
 
 		private static void ApplyControl(Control control, HashSet<Control> visited)
 		{
-			if (control == null || control.IsDisposed || !visited.Add(control) || excludedControls.Contains(control))
+			if (control == null || control.IsDisposed || !visited.Add(control) || IsExcluded(control))
 			{
 				return;
 			}
@@ -169,10 +216,22 @@ namespace ReClassNET.UI.Theme
 					ApplyToolStrip(strip, visited);
 					break;
 
-				case ToolStripPanel _:
-				case ToolStripContentPanel _:
-					control.BackColor = p.MenuBackground;
-					control.ForeColor = p.Text;
+				case ToolStripPanel toolStripPanel:
+					toolStripPanel.BackColor = p.MenuBackground;
+					toolStripPanel.ForeColor = p.Text;
+					if (toolStripPanel.RenderMode != ToolStripRenderMode.Custom && toolStripPanel.RenderMode != ToolStripRenderMode.ManagerRenderMode)
+					{
+						toolStripPanel.RenderMode = ToolStripRenderMode.ManagerRenderMode;
+					}
+					break;
+
+				case ToolStripContentPanel contentPanel:
+					contentPanel.BackColor = p.MenuBackground;
+					contentPanel.ForeColor = p.Text;
+					if (contentPanel.RenderMode != ToolStripRenderMode.Custom && contentPanel.RenderMode != ToolStripRenderMode.ManagerRenderMode)
+					{
+						contentPanel.RenderMode = ToolStripRenderMode.ManagerRenderMode;
+					}
 					break;
 
 				case HotSpotTextBox _:
@@ -181,6 +240,7 @@ namespace ReClassNET.UI.Theme
 
 				case MemoryViewControl memoryView:
 					memoryView.BackColor = p.ContentBackground;
+					NativeTheming.ApplyScrollBars(memoryView, p.IsDark);
 					ApplyControl(memoryView.NodeContextMenuStrip, visited);
 					break;
 
@@ -221,10 +281,7 @@ namespace ReClassNET.UI.Theme
 					break;
 
 				case ComboBox comboBox:
-					comboBox.FlatStyle = FlatStyle.Flat;
-					comboBox.BackColor = p.ControlBackground;
-					comboBox.ForeColor = p.Text;
-					NativeTheming.ApplyComboBox(comboBox, p.IsDark);
+					ApplyComboBox(comboBox);
 					break;
 
 				case NumericUpDown numericUpDown:
@@ -240,13 +297,13 @@ namespace ReClassNET.UI.Theme
 					{
 						listBox.BorderStyle = BorderStyle.FixedSingle;
 					}
-					if (listBox.DrawMode == DrawMode.Normal && !(listBox is CheckedListBox))
+					if (!(listBox is CheckedListBox) && ClaimOwnerDraw(listBox, listBox.DrawMode == DrawMode.Normal))
 					{
 						// Selected items would use the system highlight colors otherwise.
 						listBox.DrawMode = DrawMode.OwnerDrawFixed;
+						listBox.DrawItem -= listBoxDrawItemHandler;
+						listBox.DrawItem += listBoxDrawItemHandler;
 					}
-					listBox.DrawItem -= listBoxDrawItemHandler;
-					listBox.DrawItem += listBoxDrawItemHandler;
 					NativeTheming.ApplyScrollBars(listBox, p.IsDark);
 					break;
 
@@ -258,13 +315,13 @@ namespace ReClassNET.UI.Theme
 					{
 						treeView.BorderStyle = BorderStyle.FixedSingle;
 					}
-					if (treeView.DrawMode == TreeViewDrawMode.Normal)
+					if (ClaimOwnerDraw(treeView, treeView.DrawMode == TreeViewDrawMode.Normal))
 					{
 						// Selected nodes (especially in unfocused trees) would use the system highlight colors otherwise.
 						treeView.DrawMode = TreeViewDrawMode.OwnerDrawText;
+						treeView.DrawNode -= treeViewDrawNodeHandler;
+						treeView.DrawNode += treeViewDrawNodeHandler;
 					}
-					treeView.DrawNode -= treeViewDrawNodeHandler;
-					treeView.DrawNode += treeViewDrawNodeHandler;
 					NativeTheming.ApplyScrollBars(treeView, p.IsDark);
 					break;
 
@@ -316,10 +373,12 @@ namespace ReClassNET.UI.Theme
 					break;
 
 				case TabControl tabControl:
-					tabControl.DrawMode = TabDrawMode.OwnerDrawFixed;
-					tabControl.DrawItem -= tabControlDrawItemHandler;
-					tabControl.DrawItem += tabControlDrawItemHandler;
-					TabControlOverlay.Attach(tabControl);
+					if (ClaimOwnerDraw(tabControl, tabControl.DrawMode == TabDrawMode.Normal))
+					{
+						tabControl.DrawMode = TabDrawMode.OwnerDrawFixed;
+						tabControl.DrawItem -= tabControlDrawItemHandler;
+						tabControl.DrawItem += tabControlDrawItemHandler;
+					}
 					break;
 
 				case TabPage tabPage:
@@ -340,6 +399,11 @@ namespace ReClassNET.UI.Theme
 					progressBar.ForeColor = p.Accent;
 					break;
 
+				case ScrollBar scrollBar:
+					// The scroll bars of a DataGridView (and of plugin controls) are separate child controls.
+					NativeTheming.ApplyScrollBars(scrollBar, p.IsDark);
+					break;
+
 				case ScrollableControl scrollable:
 					// Panel, TableLayoutPanel, FlowLayoutPanel, SplitterPanel, UserControl, ...
 					scrollable.BackColor = p.WindowBackground;
@@ -358,6 +422,8 @@ namespace ReClassNET.UI.Theme
 					control.ForeColor = p.Text;
 					break;
 			}
+
+			AttachOverlays(control);
 
 			if (control.ContextMenuStrip != null)
 			{
@@ -381,6 +447,102 @@ namespace ReClassNET.UI.Theme
 			control.HandleCreated += handleCreatedHandler;
 		}
 
+		/// <summary>Removes every hook and handler the theme installed on the control and its children.</summary>
+		private static void Unhook(Control control)
+		{
+			control.ControlAdded -= controlAddedHandler;
+			control.HandleCreated -= handleCreatedHandler;
+
+			control.Paint -= groupBoxPaintHandler;
+			control.Paint -= buttonPaintHandler;
+			control.Paint -= checkBoxPaintHandler;
+			control.Paint -= radioButtonPaintHandler;
+			control.Paint -= labelPaintHandler;
+
+			switch (control)
+			{
+				case ToolStrip strip:
+					strip.ItemAdded -= itemAddedHandler;
+					foreach (var dropDownItem in strip.Items.OfType<ToolStripDropDownItem>())
+					{
+						dropDownItem.DropDownOpening -= dropDownOpeningHandler;
+					}
+					break;
+				case ListBox listBox:
+					listBox.DrawItem -= listBoxDrawItemHandler;
+					break;
+				case ComboBox comboBox:
+					comboBox.DrawItem -= comboBoxDrawItemHandler;
+					break;
+				case TreeView treeView:
+					treeView.DrawNode -= treeViewDrawNodeHandler;
+					break;
+				case TabControl tabControl:
+					tabControl.DrawItem -= tabControlDrawItemHandler;
+					break;
+			}
+
+			ControlOverlay.Detach(control);
+
+			foreach (Control child in control.Controls)
+			{
+				Unhook(child);
+			}
+		}
+
+		/// <summary>
+		/// Remembers that the theme switched the control to owner drawing. Returns false if the control is owner drawn
+		/// by someone else (a plugin), in which case the theme leaves its painting alone.
+		/// </summary>
+		/// <param name="control">The control.</param>
+		/// <param name="isStockDrawMode">True if the control still uses the default draw mode.</param>
+		/// <returns>True if the theme owns the drawing of the control.</returns>
+		private static bool ClaimOwnerDraw(Control control, bool isStockDrawMode)
+		{
+			if (ownerDrawnByTheme.Contains(control))
+			{
+				return true;
+			}
+
+			if (!isStockDrawMode)
+			{
+				return false;
+			}
+
+			ownerDrawnByTheme.Add(control);
+			control.Disposed += ownerDrawnDisposedHandler;
+
+			return true;
+		}
+
+		private static bool IsOwnerDrawnByTheme(Control control)
+		{
+			return control != null && ownerDrawnByTheme.Contains(control);
+		}
+
+		private static void AttachOverlays(Control control)
+		{
+			switch (control)
+			{
+				case TabControl tabControl when IsOwnerDrawnByTheme(tabControl):
+					TabControlOverlay.Attach(tabControl);
+					break;
+				case ComboBox comboBox:
+					ComboBoxOverlay.Attach(comboBox);
+					break;
+				case DataGridView grid when grid.BorderStyle == BorderStyle.FixedSingle:
+					BorderOverlay.Attach(grid, true);
+					break;
+				case TextBoxBase textBox when textBox.BorderStyle == BorderStyle.FixedSingle:
+				case ListBox listBox when listBox.BorderStyle == BorderStyle.FixedSingle:
+				case TreeView treeView when treeView.BorderStyle == BorderStyle.FixedSingle:
+				case NumericUpDown numericUpDown when numericUpDown.BorderStyle == BorderStyle.FixedSingle:
+				case Panel panel when panel.BorderStyle == BorderStyle.FixedSingle:
+					BorderOverlay.Attach(control, false);
+					break;
+			}
+		}
+
 		private static void OnControlAdded(object sender, ControlEventArgs e)
 		{
 			Apply(e.Control);
@@ -396,21 +558,24 @@ namespace ReClassNET.UI.Theme
 				case Form form:
 					NativeTheming.ApplyWindowFrame(form, p.IsDark);
 					break;
-				case TabControl tabControl:
-					TabControlOverlay.Attach(tabControl);
-					break;
 				case ComboBox comboBox:
 					NativeTheming.ApplyComboBox(comboBox, p.IsDark);
 					break;
 				case TreeView _:
 				case ListBox _:
 				case TextBoxBase _:
-				case DataGridView _:
+				case ScrollBar _:
+				case MemoryViewControl _:
 					NativeTheming.ApplyScrollBars((Control)sender, p.IsDark);
 					break;
 				case ScrollableControl scrollable when scrollable.AutoScroll:
 					NativeTheming.ApplyScrollBars(scrollable, p.IsDark);
 					break;
+			}
+
+			if (sender is Control control && !IsExcluded(control))
+			{
+				AttachOverlays(control);
 			}
 		}
 
@@ -419,6 +584,22 @@ namespace ReClassNET.UI.Theme
 			if (sender is Form form)
 			{
 				Detach(form);
+			}
+		}
+
+		private static void OnExcludedDisposed(object sender, EventArgs e)
+		{
+			if (sender is Control control)
+			{
+				excludedControls.Remove(control);
+			}
+		}
+
+		private static void OnOwnerDrawnDisposed(object sender, EventArgs e)
+		{
+			if (sender is Control control)
+			{
+				ownerDrawnByTheme.Remove(control);
 			}
 		}
 
@@ -486,8 +667,14 @@ namespace ReClassNET.UI.Theme
 				case ToolStripControlHost host when host.Control != null:
 					ApplyControl(host.Control, visited);
 					break;
-				case ToolStripDropDownItem dropDownItem when dropDownItem.HasDropDownItems:
-					ApplyControl(dropDownItem.DropDown, visited);
+				case ToolStripDropDownItem dropDownItem:
+					if (dropDownItem.HasDropDownItems)
+					{
+						ApplyControl(dropDownItem.DropDown, visited);
+					}
+					// Drop downs which are filled later (plugin menus) are themed when they open.
+					dropDownItem.DropDownOpening -= dropDownOpeningHandler;
+					dropDownItem.DropDownOpening += dropDownOpeningHandler;
 					break;
 			}
 		}
@@ -495,6 +682,14 @@ namespace ReClassNET.UI.Theme
 		private static void OnToolStripItemAdded(object sender, ToolStripItemEventArgs e)
 		{
 			ApplyToolStripItem(e.Item, new HashSet<Control>());
+		}
+
+		private static void OnDropDownOpening(object sender, EventArgs e)
+		{
+			if (sender is ToolStripDropDownItem dropDownItem && dropDownItem.HasDropDownItems)
+			{
+				Apply(dropDownItem.DropDown);
+			}
 		}
 
 		#endregion
@@ -513,6 +708,25 @@ namespace ReClassNET.UI.Theme
 			}
 
 			NativeTheming.ApplyScrollBars(textBox, p.IsDark);
+		}
+
+		private static void ApplyComboBox(ComboBox comboBox)
+		{
+			var p = Palette;
+
+			comboBox.FlatStyle = FlatStyle.Flat;
+			comboBox.BackColor = p.ControlBackground;
+			comboBox.ForeColor = p.Text;
+
+			if (ClaimOwnerDraw(comboBox, comboBox.DrawMode == DrawMode.Normal))
+			{
+				// The selected item and the focused edit area would use the system highlight colors otherwise.
+				comboBox.DrawMode = DrawMode.OwnerDrawFixed;
+				comboBox.DrawItem -= comboBoxDrawItemHandler;
+				comboBox.DrawItem += comboBoxDrawItemHandler;
+			}
+
+			NativeTheming.ApplyComboBox(comboBox, p.IsDark);
 		}
 
 		private static void ApplyButton(Button button)
@@ -563,7 +777,7 @@ namespace ReClassNET.UI.Theme
 			grid.RowsDefaultCellStyle.BackColor = p.ContentBackground;
 			grid.AlternatingRowsDefaultCellStyle.BackColor = p.AlternatingRowBackground;
 
-			NativeTheming.ApplyScrollBars(grid, p.IsDark);
+			// The scroll bars are child controls of the grid, they are themed by the control walk (see the ScrollBar case).
 		}
 
 		private static void ApplyHeaderStyle(DataGridViewCellStyle style)
@@ -679,8 +893,8 @@ namespace ReClassNET.UI.Theme
 				g.FillRectangle(brush, bounds);
 			}
 
-			const int BoxSize = 13;
-			var box = new Rectangle(bounds.X, bounds.Y + ((bounds.Height - BoxSize) / 2), BoxSize, BoxSize);
+			var boxSize = DpiUtil.ScaleIntX(13);
+			var box = new Rectangle(bounds.X, bounds.Y + ((bounds.Height - boxSize) / 2), boxSize, boxSize);
 			var enabled = checkBox.Enabled;
 			var foreColor = enabled ? checkBox.ForeColor : p.DisabledText;
 
@@ -697,14 +911,16 @@ namespace ReClassNET.UI.Theme
 			{
 				using var brush = new SolidBrush(foreColor);
 
-				g.FillRectangle(brush, box.X + 3, box.Y + 3, box.Width - 6, box.Height - 6);
+				var inset = Math.Max(2, boxSize / 4);
+				g.FillRectangle(brush, box.X + inset, box.Y + inset, box.Width - (2 * inset), box.Height - (2 * inset));
 			}
 			else if (checkBox.Checked)
 			{
 				DrawCheckMark(g, box, foreColor);
 			}
 
-			var textRect = new Rectangle(box.Right + 3, bounds.Y, bounds.Width - box.Right - 3, bounds.Height);
+			var gap = DpiUtil.ScaleIntX(3);
+			var textRect = new Rectangle(box.Right + gap, bounds.Y, bounds.Width - box.Right - gap, bounds.Height);
 			TextRenderer.DrawText(g, checkBox.Text, checkBox.Font, textRect, foreColor, GetTextFormatFlags(checkBox.TextAlign));
 
 			if (checkBox.Focused)
@@ -729,8 +945,8 @@ namespace ReClassNET.UI.Theme
 				g.FillRectangle(brush, bounds);
 			}
 
-			const int CircleSize = 12;
-			var circle = new Rectangle(bounds.X, bounds.Y + ((bounds.Height - CircleSize) / 2), CircleSize, CircleSize);
+			var circleSize = DpiUtil.ScaleIntX(12);
+			var circle = new Rectangle(bounds.X, bounds.Y + ((bounds.Height - circleSize) / 2), circleSize, circleSize);
 			var enabled = radioButton.Enabled;
 			var foreColor = enabled ? radioButton.ForeColor : p.DisabledText;
 
@@ -750,13 +966,15 @@ namespace ReClassNET.UI.Theme
 				using var brush = new SolidBrush(foreColor);
 
 				var dot = circle;
-				dot.Inflate(-3, -3);
+				var inset = Math.Max(2, circleSize / 4);
+				dot.Inflate(-inset, -inset);
 				g.FillEllipse(brush, dot);
 			}
 
 			g.SmoothingMode = oldMode;
 
-			var textRect = new Rectangle(circle.Right + 4, bounds.Y, bounds.Width - circle.Right - 4, bounds.Height);
+			var gap = DpiUtil.ScaleIntX(4);
+			var textRect = new Rectangle(circle.Right + gap, bounds.Y, bounds.Width - circle.Right - gap, bounds.Height);
 			TextRenderer.DrawText(g, radioButton.Text, radioButton.Font, textRect, foreColor, GetTextFormatFlags(radioButton.TextAlign) | TextFormatFlags.NoClipping);
 
 			if (radioButton.Focused)
@@ -792,7 +1010,7 @@ namespace ReClassNET.UI.Theme
 
 		private static void OnTabControlDrawItem(object sender, DrawItemEventArgs e)
 		{
-			if (!(sender is TabControl tabControl) || e.Index < 0 || e.Index >= tabControl.TabPages.Count)
+			if (!(sender is TabControl tabControl) || !IsOwnerDrawnByTheme(tabControl) || e.Index < 0 || e.Index >= tabControl.TabPages.Count)
 			{
 				return;
 			}
@@ -812,7 +1030,7 @@ namespace ReClassNET.UI.Theme
 			{
 				using var brush = new SolidBrush(p.Accent);
 
-				g.FillRectangle(brush, bounds.X, bounds.Y, bounds.Width, 2);
+				g.FillRectangle(brush, bounds.X, bounds.Y, bounds.Width, Math.Max(1, DpiUtil.ScaleIntY(2)));
 			}
 			else
 			{
@@ -843,7 +1061,7 @@ namespace ReClassNET.UI.Theme
 
 		private static void OnListBoxDrawItem(object sender, DrawItemEventArgs e)
 		{
-			if (!(sender is ListBox listBox) || listBox.DrawMode != DrawMode.OwnerDrawFixed)
+			if (!(sender is ListBox listBox) || !IsOwnerDrawnByTheme(listBox) || listBox.DrawMode != DrawMode.OwnerDrawFixed)
 			{
 				return;
 			}
@@ -875,9 +1093,45 @@ namespace ReClassNET.UI.Theme
 			}
 		}
 
+		private static void OnComboBoxDrawItem(object sender, DrawItemEventArgs e)
+		{
+			if (!(sender is ComboBox comboBox) || !IsOwnerDrawnByTheme(comboBox))
+			{
+				return;
+			}
+
+			var p = Palette;
+			var g = e.Graphics;
+			var isEditArea = (e.State & DrawItemState.ComboBoxEdit) == DrawItemState.ComboBoxEdit;
+			var selected = (e.State & DrawItemState.Selected) == DrawItemState.Selected && !isEditArea;
+			var enabled = comboBox.Enabled;
+
+			// The edit area keeps the control colors, the focus is indicated by the frame (see PaintComboBoxFrame).
+			var backColor = !enabled ? p.WindowBackground : (selected ? p.SelectionBackground : comboBox.BackColor);
+			var foreColor = !enabled ? p.DisabledText : (selected ? p.SelectionForeground : comboBox.ForeColor);
+
+			using (var brush = new SolidBrush(backColor))
+			{
+				g.FillRectangle(brush, e.Bounds);
+			}
+
+			if (e.Index >= 0 && e.Index < comboBox.Items.Count)
+			{
+				var text = comboBox.GetItemText(comboBox.Items[e.Index]);
+				var textRect = new Rectangle(e.Bounds.X + 2, e.Bounds.Y, Math.Max(0, e.Bounds.Width - 2), e.Bounds.Height);
+
+				TextRenderer.DrawText(g, text, e.Font ?? comboBox.Font, textRect, foreColor, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
+			}
+
+			if (!isEditArea && (e.State & DrawItemState.Focus) == DrawItemState.Focus && (e.State & DrawItemState.NoFocusRect) != DrawItemState.NoFocusRect)
+			{
+				ControlPaint.DrawFocusRectangle(g, e.Bounds, foreColor, backColor);
+			}
+		}
+
 		private static void OnTreeViewDrawNode(object sender, DrawTreeNodeEventArgs e)
 		{
-			if (!(sender is TreeView treeView) || treeView.DrawMode != TreeViewDrawMode.OwnerDrawText || e.Node == null)
+			if (!(sender is TreeView treeView) || !IsOwnerDrawnByTheme(treeView) || treeView.DrawMode != TreeViewDrawMode.OwnerDrawText || e.Node == null)
 			{
 				return;
 			}
@@ -897,6 +1151,14 @@ namespace ReClassNET.UI.Theme
 
 			var backColor = selected ? (treeView.Focused ? p.SelectionBackground : p.InactiveSelectionBackground) : treeView.BackColor;
 			var foreColor = !treeView.Enabled ? p.DisabledText : (selected ? p.SelectionForeground : (e.Node.ForeColor.IsEmpty ? treeView.ForeColor : e.Node.ForeColor));
+
+			if (NativeMethods.IsUnix())
+			{
+				// Mono pre-fills the node with white, starting 3px left of and 1px above the bounds it hands out.
+				using var brush = new SolidBrush(treeView.BackColor);
+
+				g.FillRectangle(brush, new Rectangle(bounds.X - 4, bounds.Y - 1, bounds.Width + 4, bounds.Height + 2));
+			}
 
 			using (var brush = new SolidBrush(backColor))
 			{
@@ -941,52 +1203,138 @@ namespace ReClassNET.UI.Theme
 			g.FillRegion(brush, region);
 
 			var display = tabControl.DisplayRectangle;
+			var y = display.Top - 1;
 			using var pen = new Pen(Palette.Separator);
 
-			g.DrawLine(pen, display.Left, display.Top - 1, display.Right - 1, display.Top - 1);
-		}
+			var selectedTab = tabControl.Alignment == TabAlignment.Top && tabControl.SelectedIndex >= 0 && tabControl.SelectedIndex < tabControl.TabCount
+				? tabControl.GetTabRect(tabControl.SelectedIndex)
+				: Rectangle.Empty;
 
-		/// <summary>Subclasses a tab control to paint the themed frame after the stock painting.</summary>
-		private sealed class TabControlOverlay : NativeWindow
-		{
-			private const int WM_PAINT = 0x000F;
-
-			private static readonly Dictionary<TabControl, TabControlOverlay> overlays = new Dictionary<TabControl, TabControlOverlay>();
-
-			private readonly TabControl tabControl;
-
-			private TabControlOverlay(TabControl tabControl)
+			if (selectedTab.IsEmpty)
 			{
-				this.tabControl = tabControl;
+				g.DrawLine(pen, display.Left, y, display.Right - 1, y);
 
-				tabControl.HandleDestroyed += (sender, e) => ReleaseHandle();
-				tabControl.Disposed += (sender, e) =>
-				{
-					ReleaseHandle();
-
-					overlays.Remove(tabControl);
-				};
+				return;
 			}
 
-			public static void Attach(TabControl tabControl)
+			// The selected tab merges with its page, so the line is left out below it.
+			if (selectedTab.Left > display.Left)
 			{
-				if (tabControl == null || tabControl.IsDisposed)
+				g.DrawLine(pen, display.Left, y, selectedTab.Left - 1, y);
+			}
+			if (selectedTab.Right < display.Right)
+			{
+				g.DrawLine(pen, selectedTab.Right, y, display.Right - 1, y);
+			}
+		}
+
+		/// <summary>
+		/// Paints the frame and the drop down button of a flat combo box. WinForms draws them in system colors
+		/// (a white outer border and a light button) which does not fit a dark palette.
+		/// </summary>
+		/// <param name="comboBox">The combo box.</param>
+		/// <param name="g">The graphics to paint on.</param>
+		public static void PaintComboBoxFrame(ComboBox comboBox, Graphics g)
+		{
+			Contract.Requires(comboBox != null);
+			Contract.Requires(g != null);
+
+			var client = comboBox.ClientRectangle;
+			if (client.Width <= 4 || client.Height <= 4 || comboBox.DropDownStyle == ComboBoxStyle.Simple)
+			{
+				return;
+			}
+
+			var p = Palette;
+			var enabled = comboBox.Enabled;
+			var active = enabled && (comboBox.Focused || comboBox.DroppedDown);
+
+			var buttonWidth = Math.Min(SystemInformation.HorizontalScrollBarArrowWidth, client.Width / 2);
+			var button = new Rectangle(client.Right - buttonWidth - 1, client.Top + 1, buttonWidth, client.Height - 2);
+
+			if (enabled)
+			{
+				using var brush = new SolidBrush(comboBox.BackColor);
+
+				g.FillRectangle(brush, button);
+			}
+			else
+			{
+				// The system paints a disabled combo box in its own light colors, repaint the whole control.
+				using var brush = new SolidBrush(p.WindowBackground);
+
+				g.FillRectangle(brush, client);
+
+				var textRect = new Rectangle(client.Left + 3, client.Top, Math.Max(0, button.Left - client.Left - 4), client.Height);
+				TextRenderer.DrawText(g, comboBox.Text, comboBox.Font, textRect, p.DisabledText, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
+			}
+
+			var arrowColor = enabled ? p.Text : p.DisabledText;
+			var middle = new Point(button.Left + (button.Width / 2), button.Top + (button.Height / 2));
+			using (var brush = new SolidBrush(arrowColor))
+			{
+				g.FillPolygon(brush, new[]
+				{
+					new Point(middle.X - 3, middle.Y - 1),
+					new Point(middle.X + 4, middle.Y - 1),
+					new Point(middle.X, middle.Y + 3)
+				});
+			}
+
+			using (var pen = new Pen(active ? p.HoverBorder : p.ControlBorder))
+			{
+				g.DrawRectangle(pen, client.X, client.Y, client.Width - 1, client.Height - 1);
+			}
+		}
+
+		#endregion
+
+		#region Overlays
+
+		/// <summary>
+		/// Subclasses a control to paint over parts the stock control always draws in system colors.
+		/// The overlay follows handle re-creation (see <see cref="OnHandleCreated"/>) and is released with the control.
+		/// </summary>
+		private abstract class ControlOverlay : NativeWindow
+		{
+			private const int WM_PAINT = 0x000F;
+			private const int WM_NCPAINT = 0x0085;
+
+			private static readonly Dictionary<Control, ControlOverlay> overlays = new Dictionary<Control, ControlOverlay>();
+
+			protected Control Control { get; }
+
+			protected ControlOverlay(Control control)
+			{
+				Control = control;
+
+				control.HandleDestroyed += OnControlHandleDestroyed;
+				control.Disposed += OnControlDisposed;
+			}
+
+			protected static void Attach(Control control, Func<Control, ControlOverlay> factory)
+			{
+				if (control == null || control.IsDisposed)
 				{
 					return;
 				}
 
-				if (!overlays.TryGetValue(tabControl, out var overlay))
+				if (!overlays.TryGetValue(control, out var overlay))
 				{
-					overlay = new TabControlOverlay(tabControl);
+					overlay = factory(control);
+					if (overlay == null)
+					{
+						return;
+					}
 
-					overlays.Add(tabControl, overlay);
+					overlays.Add(control, overlay);
 				}
 
-				if (tabControl.IsHandleCreated && overlay.Handle == IntPtr.Zero)
+				if (control.IsHandleCreated && overlay.Handle == IntPtr.Zero)
 				{
 					try
 					{
-						overlay.AssignHandle(tabControl.Handle);
+						overlay.AssignHandle(control.Handle);
 					}
 					catch
 					{
@@ -995,27 +1343,172 @@ namespace ReClassNET.UI.Theme
 				}
 			}
 
+			public static void Detach(Control control)
+			{
+				if (control == null || !overlays.TryGetValue(control, out var overlay))
+				{
+					return;
+				}
+
+				overlays.Remove(control);
+
+				control.HandleDestroyed -= overlay.OnControlHandleDestroyed;
+				control.Disposed -= overlay.OnControlDisposed;
+
+				overlay.ReleaseHandle();
+			}
+
 			protected override void WndProc(ref Message m)
 			{
 				base.WndProc(ref m);
 
-				if (m.Msg != WM_PAINT || tabControl.IsDisposed || !tabControl.IsHandleCreated)
+				if (Control.IsDisposed || !Control.IsHandleCreated)
 				{
 					return;
 				}
 
 				try
 				{
-					using var g = Graphics.FromHwnd(tabControl.Handle);
-
-					PaintTabControlFrame(tabControl, g);
+					if (m.Msg == WM_PAINT)
+					{
+						AfterPaint();
+					}
+					else if (m.Msg == WM_NCPAINT)
+					{
+						AfterNonClientPaint();
+					}
 				}
 				catch
 				{
 					// ignored
 				}
 			}
+
+			/// <summary>Called after the control painted its client area.</summary>
+			protected virtual void AfterPaint()
+			{
+
+			}
+
+			/// <summary>Called after the control painted its non-client area (borders).</summary>
+			protected virtual void AfterNonClientPaint()
+			{
+
+			}
+
+			private void OnControlHandleDestroyed(object sender, EventArgs e)
+			{
+				ReleaseHandle();
+			}
+
+			private void OnControlDisposed(object sender, EventArgs e)
+			{
+				Detach(Control);
+			}
 		}
+
+		/// <summary>Paints the themed strip and frame of a tab control after the stock painting.</summary>
+		private sealed class TabControlOverlay : ControlOverlay
+		{
+			private TabControlOverlay(TabControl tabControl)
+				: base(tabControl)
+			{
+
+			}
+
+			public static void Attach(TabControl tabControl)
+			{
+				Attach(tabControl, c => new TabControlOverlay((TabControl)c));
+			}
+
+			protected override void AfterPaint()
+			{
+				using var g = Graphics.FromHwnd(Control.Handle);
+
+				PaintTabControlFrame((TabControl)Control, g);
+			}
+		}
+
+		/// <summary>Paints the themed frame and drop down button of a flat combo box after the stock painting.</summary>
+		private sealed class ComboBoxOverlay : ControlOverlay
+		{
+			private ComboBoxOverlay(ComboBox comboBox)
+				: base(comboBox)
+			{
+
+			}
+
+			public static void Attach(ComboBox comboBox)
+			{
+				Attach(comboBox, c => new ComboBoxOverlay((ComboBox)c));
+			}
+
+			protected override void AfterPaint()
+			{
+				using var g = Graphics.FromHwnd(Control.Handle);
+
+				PaintComboBoxFrame((ComboBox)Control, g);
+			}
+		}
+
+		/// <summary>
+		/// Repaints the 1px border of controls with <see cref="BorderStyle.FixedSingle"/> in the palette color.
+		/// Windows draws it in the system frame color; Mono draws its own border, so the overlay is Windows only.
+		/// </summary>
+		private sealed class BorderOverlay : ControlOverlay
+		{
+			private readonly bool clientArea;
+
+			private BorderOverlay(Control control, bool clientArea)
+				: base(control)
+			{
+				this.clientArea = clientArea;
+			}
+
+			/// <summary>Attaches the overlay.</summary>
+			/// <param name="control">The control.</param>
+			/// <param name="clientArea">True if the control paints its border inside the client area (DataGridView), false for a window border.</param>
+			public static void Attach(Control control, bool clientArea)
+			{
+				if (!NativeTheming.IsSupported)
+				{
+					return;
+				}
+
+				Attach(control, c => new BorderOverlay(c, clientArea));
+			}
+
+			protected override void AfterPaint()
+			{
+				if (!clientArea)
+				{
+					return;
+				}
+
+				var client = Control.ClientRectangle;
+				if (client.Width <= 1 || client.Height <= 1)
+				{
+					return;
+				}
+
+				using var g = Graphics.FromHwnd(Control.Handle);
+				using var pen = new Pen(Palette.ControlBorder);
+
+				g.DrawRectangle(pen, client.X, client.Y, client.Width - 1, client.Height - 1);
+			}
+
+			protected override void AfterNonClientPaint()
+			{
+				if (!clientArea)
+				{
+					NativeTheming.DrawWindowFrame(Control, Palette.ControlBorder);
+				}
+			}
+		}
+
+		#endregion
+
+		#region Helpers
 
 		private static Image GetTabImage(TabControl tabControl, TabPage page)
 		{
@@ -1061,7 +1554,7 @@ namespace ReClassNET.UI.Theme
 			var oldMode = g.SmoothingMode;
 			g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
 
-			using (var pen = new Pen(color, 2.0f))
+			using (var pen = new Pen(color, Math.Max(1.5f, box.Width / 6.5f)))
 			{
 				var w = box.Width;
 				var h = box.Height;

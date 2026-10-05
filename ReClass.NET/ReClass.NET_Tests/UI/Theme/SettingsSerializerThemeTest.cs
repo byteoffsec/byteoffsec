@@ -1,6 +1,7 @@
 using System.Drawing;
 using System.Xml.Linq;
 using NFluent;
+using ReClass.NET_Tests.Nodes;
 using ReClassNET;
 using ReClassNET.UI.Theme;
 using ReClassNET.Util;
@@ -8,6 +9,11 @@ using Xunit;
 
 namespace ReClass.NET_Tests.UI.Theme
 {
+	/// <summary>
+	/// Loading settings runs the PreserveNodeOffsetsOnResize setter which writes the global layout policy,
+	/// so these tests must not run in parallel with the layout tests.
+	/// </summary>
+	[Collection(ContainerLayoutCollection.Name)]
 	public class SettingsSerializerThemeTest
 	{
 		private static XDocument CreateDocument(Settings settings, bool includeTheme)
@@ -102,6 +108,20 @@ namespace ReClass.NET_Tests.UI.Theme
 			Check.That(loaded.StayOnTop).IsTrue();
 			Check.That(loaded.PluginColor.ToArgb()).IsEqualTo(saved.PluginColor.ToArgb());
 			Check.That(loaded.BackgroundColor.ToArgb()).IsEqualTo(NodeColorPresets.Dark.BackgroundColor.ToArgb());
+		}
+
+		[Fact]
+		public void UnknownThemeValueFallsBackToTheColorGuess()
+		{
+			var saved = new Settings();
+			saved.ApplyNodeColorPreset(AppTheme.Light);
+
+			var document = CreateDocument(saved, true);
+			document.Root?.Element("General")?.Element(nameof(Settings.Theme))?.SetValue("Blue");
+
+			var loaded = SettingsSerializer.Load(document);
+
+			Check.That(loaded.Theme).IsEqualTo(AppTheme.Light);
 		}
 
 		[Fact]

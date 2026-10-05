@@ -33,6 +33,11 @@ namespace ReClassNET.Forms
 
 			InitializeComponent();
 
+			// The code box carries its own syntax colors. The generic theming must not touch it: setting the fore color
+			// of a rich text box recolors all existing text, which would wipe the highlighting after the RTF was streamed in.
+			ThemeManager.Exclude(codeRichTextBox);
+			ApplyCodeBoxTheme();
+
 			codeRichTextBox.SetInnerMargin(5, 5, 5, 5);
 
 			code = generator.GenerateCode(classes, enums, logger);
@@ -61,7 +66,17 @@ namespace ReClassNET.Forms
 
 		private void OnThemeChanged(object sender, EventArgs e)
 		{
+			ApplyCodeBoxTheme();
 			UpdateCode();
+		}
+
+		/// <summary>Sets the colors of the code box. Must run before the RTF is streamed in (see the constructor).</summary>
+		private void ApplyCodeBoxTheme()
+		{
+			var palette = ThemeManager.Palette;
+
+			codeRichTextBox.BackColor = palette.ContentBackground;
+			codeRichTextBox.ForeColor = palette.Text;
 		}
 
 		/// <summary>Colorizes the code with the style sheet of the current theme.</summary>
@@ -73,7 +88,7 @@ namespace ReClassNET.Forms
 				new CodeColorizer().Colorize(
 					code,
 					language,
-					new RtfFormatter(),
+					new RtfFormatter(ThemeManager.Palette.Text),
 					ThemedStyleSheet.ForCurrentTheme(),
 					writer
 				);
@@ -86,18 +101,35 @@ namespace ReClassNET.Forms
 	internal class RtfFormatter : IFormatter
 	{
 		private readonly RtfBuilder builder = new RtfBuilder(RtfFont.Consolas, 20);
+		private readonly Color plainTextColor;
+
+		public RtfFormatter()
+			: this(ThemeManager.Palette.Text)
+		{
+
+		}
+
+		/// <param name="plainTextColor">The color of text without a style. Emitted explicitly because text without a color falls back to the system window text color (black) which is unreadable on a dark background.</param>
+		public RtfFormatter(Color plainTextColor)
+		{
+			this.plainTextColor = plainTextColor;
+		}
 
 		public void Write(string parsedSourceCode, IList<Scope> scopes, IStyleSheet styleSheet, TextWriter textWriter)
 		{
+			var color = plainTextColor;
+
 			var scopeName = scopes.FirstOrDefault()?.Name;
 			if (scopeName != null && styleSheet.Styles.Contains(scopeName))
 			{
-				builder.SetForeColor(styleSheet.Styles[scopeName].Foreground).Append(parsedSourceCode);
+				var styleColor = styleSheet.Styles[scopeName].Foreground;
+				if (!styleColor.IsEmpty)
+				{
+					color = styleColor;
+				}
 			}
-			else
-			{
-				builder.Append(parsedSourceCode);
-			}
+
+			builder.SetForeColor(color).Append(parsedSourceCode);
 		}
 
 		public void WriteHeader(IStyleSheet styleSheet, ILanguage language, TextWriter textWriter)

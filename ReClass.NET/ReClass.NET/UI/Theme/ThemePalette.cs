@@ -1,3 +1,4 @@
+using System;
 using System.Drawing;
 
 namespace ReClassNET.UI.Theme
@@ -43,6 +44,12 @@ namespace ReClassNET.UI.Theme
 
 		/// <summary>Text drawn on top of <see cref="Accent"/>.</summary>
 		public Color AccentText { get; }
+
+		/// <summary>
+		/// Text color for values which need attention (changed values, errors). Readable on the content backgrounds,
+		/// unlike <see cref="Accent"/> which is tuned as a fill color.
+		/// </summary>
+		public Color AttentionText { get; }
 
 		/// <summary>Background of selected rows and items.</summary>
 		public Color SelectionBackground { get; }
@@ -125,6 +132,7 @@ namespace ReClassNET.UI.Theme
 			Color subtleText,
 			Color accent,
 			Color accentText,
+			Color attentionText,
 			Color selectionBackground,
 			Color selectionForeground,
 			Color inactiveSelectionBackground,
@@ -160,6 +168,7 @@ namespace ReClassNET.UI.Theme
 			SubtleText = subtleText;
 			Accent = accent;
 			AccentText = accentText;
+			AttentionText = attentionText;
 			SelectionBackground = selectionBackground;
 			SelectionForeground = selectionForeground;
 			InactiveSelectionBackground = inactiveSelectionBackground;
@@ -194,10 +203,11 @@ namespace ReClassNET.UI.Theme
 			contentBackground: Rgb(0xFF, 0xFF, 0xFF),
 			controlBorder: Rgb(0xC6, 0xC6, 0xC6),
 			text: Rgb(0x1E, 0x1E, 0x1E),
-			disabledText: Rgb(0x9A, 0x9A, 0x9A),
+			disabledText: Rgb(0x68, 0x68, 0x68),
 			subtleText: Rgb(0x75, 0x75, 0x75),
 			accent: Rgb(0xC6, 0x28, 0x28),
 			accentText: Rgb(0xFF, 0xFF, 0xFF),
+			attentionText: Rgb(0xC6, 0x28, 0x28),
 			selectionBackground: Rgb(0xF5, 0xD5, 0xD5),
 			selectionForeground: Rgb(0x1E, 0x1E, 0x1E),
 			inactiveSelectionBackground: Rgb(0xE4, 0xE4, 0xE4),
@@ -236,6 +246,7 @@ namespace ReClassNET.UI.Theme
 			subtleText: Rgb(0xA0, 0xA0, 0xA0),
 			accent: Rgb(0xE5, 0x39, 0x35),
 			accentText: Rgb(0xFF, 0xFF, 0xFF),
+			attentionText: Rgb(0xF1, 0x4C, 0x4C),
 			selectionBackground: Rgb(0x5A, 0x2A, 0x2A),
 			selectionForeground: Rgb(0xFF, 0xFF, 0xFF),
 			inactiveSelectionBackground: Rgb(0x3F, 0x3F, 0x46),
@@ -282,9 +293,33 @@ namespace ReClassNET.UI.Theme
 			return IsDarkColor(background) ? Rgb(0xF1, 0xF1, 0xF1) : Rgb(0x1E, 0x1E, 0x1E);
 		}
 
+		/// <summary>Calculates the WCAG contrast ratio (1:1 to 21:1) between two opaque colors.</summary>
+		/// <param name="a">The first color.</param>
+		/// <param name="b">The second color.</param>
+		/// <returns>The contrast ratio, a value between 1 and 21.</returns>
+		public static double GetContrastRatio(Color a, Color b)
+		{
+			var la = GetLinearLuminance(a) + 0.05;
+			var lb = GetLinearLuminance(b) + 0.05;
+
+			return la > lb ? la / lb : lb / la;
+		}
+
 		private static double GetRelativeLuminance(Color color)
 		{
 			return (0.2126 * color.R + 0.7152 * color.G + 0.0722 * color.B) / 255.0;
+		}
+
+		private static double GetLinearLuminance(Color color)
+		{
+			return 0.2126 * Linearize(color.R) + 0.7152 * Linearize(color.G) + 0.0722 * Linearize(color.B);
+		}
+
+		private static double Linearize(byte channel)
+		{
+			var c = channel / 255.0;
+
+			return c <= 0.03928 ? c / 12.92 : Math.Pow((c + 0.055) / 1.055, 2.4);
 		}
 
 		private static Color Rgb(int r, int g, int b) => Color.FromArgb(255, r, g, b);

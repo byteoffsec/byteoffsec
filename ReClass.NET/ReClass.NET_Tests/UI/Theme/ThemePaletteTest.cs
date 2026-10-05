@@ -72,6 +72,69 @@ namespace ReClass.NET_Tests.UI.Theme
 			}
 		}
 
+		[Fact]
+		public void ContrastRatioFollowsTheWcagDefinition()
+		{
+			Check.That(ThemePalette.GetContrastRatio(Color.Black, Color.White)).IsCloseTo(21.0, 0.01);
+			Check.That(ThemePalette.GetContrastRatio(Color.White, Color.Black)).IsCloseTo(21.0, 0.01);
+			Check.That(ThemePalette.GetContrastRatio(Color.White, Color.White)).IsCloseTo(1.0, 0.01);
+			Check.That(ThemePalette.GetContrastRatio(Color.FromArgb(0x77, 0x77, 0x77), Color.White)).IsCloseTo(4.48, 0.02);
+		}
+
+		[Fact]
+		public void TextIsReadableOnEverySurface()
+		{
+			foreach (var palette in new[] { ThemePalette.Light, ThemePalette.Dark })
+			{
+				foreach (var background in Surfaces(palette))
+				{
+					CheckContrast($"{palette.Theme}.Text on {background.Name}", palette.Text, background.Color, 4.5);
+				}
+
+				CheckContrast($"{palette.Theme}.AttentionText", palette.AttentionText, palette.ContentBackground, 4.5);
+				CheckContrast($"{palette.Theme}.SelectionForeground", palette.SelectionForeground, palette.SelectionBackground, 4.5);
+				CheckContrast($"{palette.Theme}.AccentText", palette.AccentText, palette.Accent, 3.0);
+			}
+		}
+
+		[Fact]
+		public void DisabledTextStaysLegible()
+		{
+			// Disabled items have to be recognizable as disabled but still readable.
+			foreach (var background in Surfaces(ThemePalette.Light))
+			{
+				CheckContrast($"Light.DisabledText on {background.Name}", ThemePalette.Light.DisabledText, background.Color, 4.5);
+			}
+			foreach (var background in Surfaces(ThemePalette.Dark))
+			{
+				CheckContrast($"Dark.DisabledText on {background.Name}", ThemePalette.Dark.DisabledText, background.Color, 3.0);
+			}
+
+			foreach (var palette in new[] { ThemePalette.Light, ThemePalette.Dark })
+			{
+				Check.That(ThemePalette.GetContrastRatio(palette.DisabledText, palette.WindowBackground)).IsStrictlyLessThan(ThemePalette.GetContrastRatio(palette.Text, palette.WindowBackground));
+			}
+		}
+
+		private static void CheckContrast(string what, Color foreground, Color background, double minimumRatio)
+		{
+			var ratio = ThemePalette.GetContrastRatio(foreground, background);
+
+			Check.WithCustomMessage($"{what}: contrast {ratio:F2}:1 is below {minimumRatio:F1}:1").That(ratio >= minimumRatio).IsTrue();
+		}
+
+		private static (string Name, Color Color)[] Surfaces(ThemePalette palette) => new[]
+		{
+			(nameof(palette.WindowBackground), palette.WindowBackground),
+			(nameof(palette.Surface), palette.Surface),
+			(nameof(palette.ControlBackground), palette.ControlBackground),
+			(nameof(palette.ContentBackground), palette.ContentBackground),
+			(nameof(palette.MenuBackground), palette.MenuBackground),
+			(nameof(palette.MenuDropDownBackground), palette.MenuDropDownBackground),
+			(nameof(palette.ButtonBackground), palette.ButtonBackground),
+			(nameof(palette.HeaderBackground), palette.HeaderBackground)
+		};
+
 		[Theory]
 		[InlineData(0, 0, 0, true)]
 		[InlineData(0x1E, 0x1E, 0x1E, true)]

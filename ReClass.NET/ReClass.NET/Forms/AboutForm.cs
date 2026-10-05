@@ -13,12 +13,13 @@ namespace ReClassNET.Forms
 
 			bannerBox.Icon = Properties.Resources.ReClassNet.ToBitmap();
 			bannerBox.Title = Constants.ApplicationDisplayName;
-			bannerBox.Text = $"Version: {Constants.ApplicationVersion} (based on ReClass.NET by KN4CK3R, {Constants.UpstreamHomepageUrl})";
+			bannerBox.Text = $"Version {Constants.ApplicationVersion} - based on ReClass.NET by KN4CK3R";
 
 			platformValueLabel.Text = Constants.Platform;
 			buildTimeValueLabel.Text = Properties.Resources.BuildDate;
 			authorValueLabel.Text = Constants.Author;
 			homepageValueLabel.Text = Constants.HomepageUrl;
+			upstreamValueLabel.Text = Constants.UpstreamHomepageUrl;
 		}
 
 		protected override void OnLoad(EventArgs e)
@@ -38,6 +39,11 @@ namespace ReClassNET.Forms
 		private void homepageValueLabel_LinkClicked(object sender, LinkLabelLinkClickedEventArgs e)
 		{
 			Process.Start(Constants.HomepageUrl);
+		}
+
+		private void upstreamValueLabel_LinkClicked(object sender, LinkLabelLinkClickedEventArgs e)
+		{
+			Process.Start(Constants.UpstreamHomepageUrl);
 		}
 	}
 }

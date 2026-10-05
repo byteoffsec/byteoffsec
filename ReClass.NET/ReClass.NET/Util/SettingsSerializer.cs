@@ -70,11 +70,14 @@ namespace ReClassNET.Util
 					XElementSerializer.TryRead(general, nameof(settings.StayOnTop), e => settings.StayOnTop = XElementSerializer.ToBool(e));
 					XElementSerializer.TryRead(general, nameof(settings.RunAsAdmin), e => settings.RunAsAdmin = XElementSerializer.ToBool(e));
 					XElementSerializer.TryRead(general, nameof(settings.RandomizeWindowTitle), e => settings.RandomizeWindowTitle = XElementSerializer.ToBool(e));
-					themeElementPresent = XElementSerializer.TryRead(general, nameof(settings.Theme), e =>
+					XElementSerializer.TryRead(general, nameof(settings.Theme), e =>
 					{
+						// An unknown value counts as missing, so the theme is inferred from the colors below.
 						if (Enum.TryParse<AppTheme>(XElementSerializer.ToString(e), true, out var theme))
 						{
 							settings.Theme = theme;
+
+							themeElementPresent = true;
 						}
 					});
 				}

@@ -1,4 +1,5 @@
 using System;
+using System.Drawing;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using ReClassNET.Native;
@@ -6,7 +7,7 @@ using ReClassNET.Native;
 namespace ReClassNET.UI.Theme
 {
 	/// <summary>
-	/// Windows only enhancements of the theme: dark title bars (DWM) and dark scroll bars (uxtheme).
+	/// Windows only enhancements of the theme: dark title bars (DWM), dark scroll bars (uxtheme) and palette colored window frames.
 	/// Every call is skipped on other platforms and guarded against missing APIs on older Windows builds.
 	/// </summary>
 	public static class NativeTheming
@@ -25,12 +26,19 @@ namespace ReClassNET.UI.Theme
 		[DllImport("user32.dll", ExactSpelling = true)]
 		private static extern IntPtr SendMessageW(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam);
 
+		[DllImport("user32.dll", ExactSpelling = true)]
+		private static extern IntPtr GetWindowDC(IntPtr hwnd);
+
+		[DllImport("user32.dll", ExactSpelling = true)]
+		private static extern int ReleaseDC(IntPtr hwnd, IntPtr hdc);
+
 		private const int WM_THEMECHANGED = 0x031A;
 
 		#endregion
 
 		private static bool dwmUnavailable;
 		private static bool uxThemeUnavailable;
+		private static bool windowDcUnavailable;
 
 		/// <summary>True if the native enhancements can be used on this platform.</summary>
 		public static bool IsSupported => !NativeMethods.IsUnix();
@@ -93,6 +101,65 @@ namespace ReClassNET.UI.Theme
 			catch
 			{
 				uxThemeUnavailable = true;
+			}
+		}
+
+		/// <summary>
+		/// Draws a 1px frame around the whole window of the control, non-client area included. Used to repaint the
+		/// system drawn border of controls with <see cref="BorderStyle.FixedSingle"/> in a palette color.
+		/// </summary>
+		/// <param name="control">The control.</param>
+		/// <param name="color">The frame color.</param>
+		public static void DrawWindowFrame(Control control, Color color)
+		{
+			if (control == null || !IsSupported || windowDcUnavailable)
+			{
+				return;
+			}
+
+			try
+			{
+				if (!control.IsHandleCreated || control.IsDisposed)
+				{
+					return;
+				}
+
+				var hwnd = control.Handle;
+				var hdc = GetWindowDC(hwnd);
+				if (hdc == IntPtr.Zero)
+				{
+					return;
+				}
+
+				try
+				{
+					var size = control.Size;
+					if (size.Width <= 1 || size.Height <= 1)
+					{
+						return;
+					}
+
+					using var g = Graphics.FromHdc(hdc);
+					using var pen = new Pen(color);
+
+					g.DrawRectangle(pen, 0, 0, size.Width - 1, size.Height - 1);
+				}
+				finally
+				{
+					ReleaseDC(hwnd, hdc);
+				}
+			}
+			catch (DllNotFoundException)
+			{
+				windowDcUnavailable = true;
+			}
+			catch (EntryPointNotFoundException)
+			{
+				windowDcUnavailable = true;
+			}
+			catch
+			{
+				// ignored
 			}
 		}
 
