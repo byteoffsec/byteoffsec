@@ -1,3 +1,4 @@
+using System;
 using System.Diagnostics.Contracts;
 using System.Drawing;
 using System.Text;
@@ -22,7 +23,10 @@ namespace ReClassNET.Nodes
 
 		public override void CopyFromNode(BaseNode node)
 		{
-			Length = node.MemorySize / CharacterSize;
+			base.CopyFromNode(node);
+
+			// Take over the size of the replaced node, but never create an empty text.
+			Length = Math.Max(1, node.MemorySize / CharacterSize);
 		}
 
 		protected Size DrawText(DrawContext context, int x, int y, string type)

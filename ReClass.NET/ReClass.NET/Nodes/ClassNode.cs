@@ -25,6 +25,8 @@ namespace ReClassNET.Nodes
 
 		protected override bool ShouldCompensateSizeChanges => true;
 
+		protected override bool RequiresNodesForCompleteLayout => true;
+
 		public Guid Uuid { get; set; }
 
 		public string AddressFormula { get; set; } = DefaultAddressFormula;
@@ -104,7 +106,9 @@ namespace ReClassNET.Nodes
 
 				var innerContext = context.Clone();
 				innerContext.Level++;
-				foreach (var node in Nodes)
+				// A node may change its size while it is drawn (functions get their size from the disassembler)
+				// which compensates the layout and modifies the node list, so draw a snapshot.
+				foreach (var node in Nodes.ToList())
 				{
 					Size AggregateNodeSizes(Size baseSize, Size newSize)
 					{
@@ -183,6 +187,13 @@ namespace ReClassNET.Nodes
 
 		protected internal override void ChildHasChanged(BaseNode child)
 		{
+			if (child != this)
+			{
+				// Settle the size change of the child (and the referenced class if the child is a class instance)
+				// before anyone else gets notified, so the outer classes see the final size of this class.
+				UpdateOffsets();
+			}
+
 			NodesChanged?.Invoke(this);
 		}
 	}

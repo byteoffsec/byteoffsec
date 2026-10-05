@@ -287,59 +287,171 @@ namespace ReClassNET.Forms
 
 			var selectedNodes = memoryViewControl.GetSelectedNodes();
 
-			var newSelected = new List<MemoryViewControl.SelectedNodeInfo>(selectedNodes.Count);
-
+			// Group the selection by container and split every group into partitions of adjacent nodes.
+			// Every partition is a byte range the user wants to fill with the new type.
 			var hotSpotPartitions = selectedNodes
 				.WhereNot(s => s.Node is ClassNode)
+				.Where(s => s.Node.GetParentContainer()?.ContainsNode(s.Node) == true)
 				.GroupBy(s => s.Node.GetParentContainer())
 				.Select(g => new
 				{
 					Container = g.Key,
-					Partitions = g.OrderBy(s => s.Node.Offset)
-						.GroupWhile((s1, s2) => s1.Node.Offset + s1.Node.MemorySize == s2.Node.Offset)
-				});
+					Partitions = g.OrderBy(s => g.Key.FindNodeIndex(s.Node))
+						.GroupWhile((s1, s2) => g.Key.FindNodeIndex(s1.Node) + 1 == g.Key.FindNodeIndex(s2.Node))
+						.Select(p => p.ToList())
+						.ToList()
+				})
+				.Where(g => g.Partitions.Count > 0)
+				.ToList();
+
+			if (hotSpotPartitions.Count == 0)
+			{
+				return;
+			}
+
+			var createdNodes = new List<BaseNode>();
+			BaseNode CreateNode()
+			{
+				var node = BaseNode.CreateInstanceFromType(type);
+				createdNodes.Add(node);
+				return node;
+			}
+
+			// Dry run: a growing node consumes its successors. Ask before a node the user already defined gets removed.
+			var probe = CreateNode();
+			var consumedNodes = BaseContainerNode.GetNodesConsumedByReplacingRanges(
+				hotSpotPartitions.SelectMany(g => g.Partitions.Select(p => (g.Container, (IReadOnlyList<BaseNode>)p.Select(s => s.Node).ToList()))),
+				probe
+			);
+			if (consumedNodes.Count > 0)
+			{
+				var message = "The new type is bigger than the selected node(s) and consumes the following nodes:"
+					+ Environment.NewLine + Environment.NewLine
+					+ string.Join(Environment.NewLine, consumedNodes.Select(n => $"{n.Name} (0x{n.Offset:X})"))
+					+ Environment.NewLine + Environment.NewLine
+					+ "Do you want to continue?";
+
+				if (MessageBox.Show(this, message, Constants.ApplicationName, MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
+				{
+					RemoveClassesCreatedByUnusedNodes(createdNodes);
+
+					return;
+				}
+			}
+
+			// The probe is the first node which gets placed, afterwards new nodes are created.
+			var pendingProbe = probe;
+			BaseNode CreateNextNode()
+			{
+				if (pendingProbe != null)
+				{
+					var node = pendingProbe;
+					pendingProbe = null;
+					return node;
+				}
+
+				return CreateNode();
+			}
+
+			var newSelected = new List<MemoryViewControl.SelectedNodeInfo>(selectedNodes.Count);
 
 			foreach (var containerPartitions in hotSpotPartitions)
 			{
-				containerPartitions.Container.BeginUpdate();
+				var container = containerPartitions.Container;
 
-				foreach (var partition in containerPartitions.Partitions)
+				if (container.PreservesSuccessorOffsets)
 				{
-					var hotSpotsToReplace = new Queue<MemoryViewControl.SelectedNodeInfo>(partition);
-					while (hotSpotsToReplace.Count > 0)
+					foreach (var partition in containerPartitions.Partitions)
 					{
-						var selected = hotSpotsToReplace.Dequeue();
-
-						var node = BaseNode.CreateInstanceFromType(type);
-
-						var createdNodes = new List<BaseNode>();
-						containerPartitions.Container.ReplaceChildNode(selected.Node, node, ref createdNodes);
-
-						node.IsSelected = true;
-
-						var info = new MemoryViewControl.SelectedNodeInfo(node, selected.Process, selected.Memory, selected.Address, selected.Level);
-
-						newSelected.Add(info);
-
-						// If more than one node is selected I assume the user wants to replace the complete range with the desired node type.
-						if (selectedNodes.Count > 1)
+						// A previous partition may have consumed nodes of this one.
+						var anchor = partition.FirstOrDefault(s => container.ContainsNode(s.Node));
+						if (anchor == null)
 						{
-							foreach (var createdNode in createdNodes)
-							{
-								hotSpotsToReplace.Enqueue(new MemoryViewControl.SelectedNodeInfo(createdNode, selected.Process, selected.Memory, selected.Address + createdNode.Offset - node.Offset, selected.Level));
-							}
+							continue;
+						}
+
+						var anchorOffset = anchor.Node.Offset;
+
+						var placedNodes = container.ReplaceNodeRange(partition.Select(s => s.Node), CreateNextNode);
+
+						foreach (var placedNode in placedNodes)
+						{
+							newSelected.Add(new MemoryViewControl.SelectedNodeInfo(placedNode, anchor.Process, anchor.Memory, anchor.Address + (placedNode.Offset - anchorOffset), anchor.Level));
 						}
 					}
 				}
+				else
+				{
+					// Legacy behaviour: replace every node on its own, a growing node shifts its successors.
+					container.BeginUpdate();
 
-				containerPartitions.Container.EndUpdate();
+					foreach (var partition in containerPartitions.Partitions)
+					{
+						var hotSpotsToReplace = new Queue<MemoryViewControl.SelectedNodeInfo>(partition);
+						while (hotSpotsToReplace.Count > 0)
+						{
+							var selected = hotSpotsToReplace.Dequeue();
+							if (!container.ContainsNode(selected.Node))
+							{
+								continue;
+							}
+
+							var node = CreateNextNode();
+
+							var additionalNodes = new List<BaseNode>();
+							container.ReplaceChildNode(selected.Node, node, ref additionalNodes);
+
+							node.IsSelected = true;
+
+							var info = new MemoryViewControl.SelectedNodeInfo(node, selected.Process, selected.Memory, selected.Address, selected.Level);
+
+							newSelected.Add(info);
+
+							// If more than one node is selected I assume the user wants to replace the complete range with the desired node type.
+							if (selectedNodes.Count > 1)
+							{
+								foreach (var createdNode in additionalNodes)
+								{
+									hotSpotsToReplace.Enqueue(new MemoryViewControl.SelectedNodeInfo(createdNode, selected.Process, selected.Memory, selected.Address + createdNode.Offset - node.Offset, selected.Level));
+								}
+							}
+						}
+					}
+
+					container.EndUpdate();
+				}
 			}
+
+			RemoveClassesCreatedByUnusedNodes(createdNodes.Except(newSelected.Select(s => s.Node)));
 
 			memoryViewControl.ClearSelection();
 
 			if (newSelected.Count > 0)
 			{
 				memoryViewControl.SetSelectedNodes(newSelected);
+			}
+		}
+
+		/// <summary>
+		/// Removes the classes which were created for nodes (class instances, pointers) that didn't make it into a container.
+		/// </summary>
+		private void RemoveClassesCreatedByUnusedNodes(IEnumerable<BaseNode> unusedNodes)
+		{
+			foreach (var node in unusedNodes)
+			{
+				if (node is BaseWrapperNode wrapperNode
+					&& wrapperNode.ResolveMostInnerNode() is ClassNode classNode
+					&& CurrentProject.ContainsClass(classNode.Uuid))
+				{
+					try
+					{
+						CurrentProject.Remove(classNode);
+					}
+					catch (ClassReferencedException)
+					{
+						// Keep the class if something else references it in the meantime.
+					}
+				}
 			}
 		}
 

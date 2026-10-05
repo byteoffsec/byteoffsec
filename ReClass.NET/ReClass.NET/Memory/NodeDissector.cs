@@ -15,11 +15,18 @@ namespace ReClassNET.Memory
 			Contract.Requires(Contract.ForAll(nodes, n => n != null));
 			Contract.Requires(memory != null);
 
-			foreach (var node in nodes)
+			foreach (var node in nodes.ToList())
 			{
+				// A previous guess may have grown and consumed this node (see ContainerLayoutPolicy), skip it.
+				var container = node.GetParentContainer();
+				if (container == null || !container.ContainsNode(node))
+				{
+					continue;
+				}
+
 				if (GuessNode(node, reader, memory, out var guessedNode))
 				{
-					node.GetParentContainer()?.ReplaceChildNode(node, guessedNode);
+					container.ReplaceChildNode(node, guessedNode);
 				}
 			}
 		}

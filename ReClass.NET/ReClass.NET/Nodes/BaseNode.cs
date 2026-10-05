@@ -51,6 +51,14 @@ namespace ReClassNET.Nodes
 		/// <summary>Size of the node in bytes.</summary>
 		public abstract int MemorySize { get; }
 
+		/// <summary>
+		/// The number of bytes this node occupied when the parent container calculated its layout the last time
+		/// (see <see cref="BaseContainerNode.UpdateOffsets"/>). -1 if the node was never laid out by its current parent
+		/// or if the size was not known at that time (for example a class instance of a class which is still loading).
+		/// A container uses the difference between this value and <see cref="MemorySize"/> to detect size changes of its children.
+		/// </summary>
+		public int LayoutSize { get; internal set; } = -1;
+
 		public event NodeEventHandler NameChanged;
 		public event NodeEventHandler CommentChanged;
 

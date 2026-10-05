@@ -218,25 +218,40 @@ namespace ReClassNET.DataExchange.ReClass
 
 			var needsSerialisationClass = true;
 
-			foreach (var node in nodes)
+			// The nodes get added to the serialisation class temporarily, remember where they belong.
+			var nodeList = nodes.ToList();
+			var originalParents = nodeList.Select(n => (Node: n, n.ParentNode, n.LayoutSize)).ToList();
+
+			try
 			{
-				RecursiveAddClasses(node);
-
-				if (!(node is ClassNode))
+				foreach (var node in nodeList)
 				{
-					if (needsSerialisationClass)
+					RecursiveAddClasses(node);
+
+					if (!(node is ClassNode))
 					{
-						needsSerialisationClass = false;
+						if (needsSerialisationClass)
+						{
+							needsSerialisationClass = false;
 
-						project.AddClass(serialisationClass);
+							project.AddClass(serialisationClass);
+						}
+
+						serialisationClass.AddNode(node);
 					}
+				}
 
-					serialisationClass.AddNode(node);
+				var file = new ReClassNetFile(project);
+				file.Save(output, logger);
+			}
+			finally
+			{
+				foreach (var (node, parentNode, layoutSize) in originalParents)
+				{
+					node.ParentNode = parentNode;
+					node.LayoutSize = layoutSize;
 				}
 			}
-
-			var file = new ReClassNetFile(project);
-			file.Save(output, logger);
 		}
 	}
 }

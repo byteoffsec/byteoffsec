@@ -8,7 +8,7 @@ namespace ReClassNET.Nodes
 {
 	public class UnionNode : BaseContainerNode
 	{
-		public override int MemorySize => Nodes.Max(n => n.MemorySize);
+		public override int MemorySize => Nodes.Select(n => n.MemorySize).DefaultIfEmpty(0).Max();
 
 		protected override bool ShouldCompensateSizeChanges => false;
 
@@ -38,10 +38,8 @@ namespace ReClassNET.Nodes
 
 		public override void UpdateOffsets()
 		{
-			foreach (var node in Nodes)
-			{
-				node.Offset = 0;
-			}
+			// All members share the offset 0.
+			UpdateLayout(false);
 		}
 
 		public override Size Draw(DrawContext context, int x, int y)
